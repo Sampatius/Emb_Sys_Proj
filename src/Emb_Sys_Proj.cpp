@@ -1,12 +1,12 @@
 /*
-===============================================================================
+ ===============================================================================
  Name        : main.c
  Author      : $(author)
  Version     :
  Copyright   : $(copyright)
  Description : main definition
-===============================================================================
-*/
+ ===============================================================================
+ */
 
 #if defined (__USE_LPCOPEN)
 #if defined(NO_BOARD_LIB)
@@ -20,29 +20,51 @@
 
 // TODO: insert other include files here
 
+#include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
+#include "semphr.h"
+
+#include "user_vcom.h"
+#include "DigitalIoPin.h"
+#include "GCodeParser.h"
+
 // TODO: insert other definitions and declarations here
+
+GCodeParser* parser;
+
+static void prvSetupHardware(void) {
+	SystemCoreClockUpdate();
+	Board_Init();
+}
+
+extern "C" {
+
+void vConfigureTimerForRunTimeStats(void) {
+	Chip_SCT_Init(LPC_SCTSMALL1);
+	LPC_SCTSMALL1->CONFIG = SCT_CONFIG_32BIT_COUNTER;
+	LPC_SCTSMALL1->CTRL_U = SCT_CTRL_PRE_L(255) | SCT_CTRL_CLRCTR_L; // set prescaler to 256 (255 + 1), and start timer
+}
+}
+
+static void vParserTask(void *pvParameters) {
+	while(1) {
+		parser->read();
+		vTaskDelay(10);
+	}
+}
 
 int main(void) {
 
-#if defined (__USE_LPCOPEN)
-    // Read clock settings and update SystemCoreClock variable
-    SystemCoreClockUpdate();
-#if !defined(NO_BOARD_LIB)
-    // Set up and initialize all required blocks and
-    // functions related to the board hardware
-    Board_Init();
-    // Set the LED to the state of "On"
-    Board_LED_Set(0, true);
-#endif
-#endif
+	prvSetupHardware();
 
-    // TODO: insert code here
+	parser = new GCodeParser();
 
-    // Force the counter to be placed into memory
-    volatile static int i = 0 ;
-    // Enter an infinite loop, just incrementing a counter
-    while(1) {
-        i++ ;
-    }
-    return 0 ;
+	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 5, NULL,
+			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
+
+	xTaskCreate(cdc_task, "CDC", configMINIMAL_STACK_SIZE * 5, NULL,
+			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
+
+	vTaskStartScheduler();
 }
