@@ -6,12 +6,9 @@
  */
 
 #include "StepperController.h"
-#include "StepperMotor.h"
 
-StepperController::StepperController() {
+StepperController::StepperController() : motorX(0,27,0,28,1,0,0,24), motorY(0,0,0,0,0,0,0,0){
 	//These guys take lim sw and motor dir and step pins and ports as params
-	motorX = new StepperMotor(0,0,0,0,0,0,0,0);
-	motorY = new StepperMotor(0,0,0,0,0,0,0,0);
 }
 
 StepperController::~StepperController() {
@@ -19,40 +16,41 @@ StepperController::~StepperController() {
 }
 
 //This might be full of shit, feel free to modify
-void StepperController::Calibrate(StepperMotor motor) {
-	bool direction = false, firstHit = false, secondHit = false, calibrated = false;
+void StepperController::Calibrate() {
+	bool direction = false, firstHit = false, secondHit = false, calibrated = false, state = true;
 
 	int steps = 0, avgSteps = 0;
 	//Before starting counting steps hit either switch
 	while (!firstHit && !calibrated) {
-		motor.dir->write(direction);
-		motor.step->write(state);
+		motorX.getDir().write(direction);
+		motorX.getDir().write(direction);
+		motorX.getStep().write(state);
 		state = !state;
 		vTaskDelay(1);
 
-		if (motor.limStart->read() || motor.limEnd->read()) {
+		if (motorX.getLimStart().read() || motorX.getLimEnd().read()) {
 			direction = !direction;
-			motor.dir->write(direction);
+			motorX.getDir().write(direction);
 			firstHit = true;
 			break;
 		}
 	}
 	//After first switch is hit start counting steps, when second switch is hit: calibrated
 	while (firstHit && !calibrated) {
-		motor.dir->write(direction);
-		motor.step->write(state);
+		motorX.getDir().write(direction);
+		motorX.getStep().write(state);
 		state = !state;
 		steps++;
 		vTaskDelay(1);
 
-		if (!(motor.limStart->read() || motor.limEnd->read())) {
+		if (!(motorX.getLimStart().read() || motorX.getLimEnd().read())) {
 			secondHit = true;
 		}
 
 		if (secondHit) {
-			if ((motor.limStart->read() || motor.limEnd->read())) {
+			if ((motorX.getLimStart().read() || motorX.getLimEnd().read())) {
 				direction = !direction;
-				motor.dir->write(direction);
+				motorX.getDir().write(direction);
 
 				calibrated = true;
 				avgSteps = steps;
@@ -65,19 +63,19 @@ void StepperController::Calibrate(StepperMotor motor) {
 		if (secondHit) {
 			//REVERSE
 			for (int i = 0; i < avgSteps * 0.02; ++i) {
-				motor.dir->write(direction);
-				motor.step->write(state);
+				motorX.getDir().write(direction);
+				motorX.getStep().write(state);
 				state = !state;
 				vTaskDelay(1);
 				avgSteps -= 2;
 			}
 			secondHit = false;
 			//Drive to center
-			motor.dir->write(direction);
+			motorX.getDir().write(direction);
 			//RIT_start(avgSteps / 2, 1000000 / 3000);
 			for (int i = 0; i < avgSteps / 2; ++i) {
-				motor.dir->write(direction);
-				motor.step->write(state);
+				motorX.getDir().write(direction);
+				motorX.getStep().write(state);
 				state = !state;
 				vTaskDelay(1);
 			}

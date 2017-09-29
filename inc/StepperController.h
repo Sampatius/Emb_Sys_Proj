@@ -8,6 +8,10 @@
 #ifndef STEPPERCONTROLLER_H_
 #define STEPPERCONTROLLER_H_
 
+#include "StepperMotor.h"
+#include "FreeRTOS.h"
+#include "task.h"
+
 class StepperController {
 public:
 	StepperController();
@@ -15,8 +19,8 @@ public:
 	void DriveMotor(StepperMotor motor, int coord);
 	void Calibrate();
 
-	StepperMotor* motorX, motorY;
 private:
+	StepperMotor motorX, motorY;
 };
 
 #endif /* STEPPERCONTROLLER_H_ */

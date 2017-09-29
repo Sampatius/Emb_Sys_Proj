@@ -18,19 +18,20 @@
 
 #include <cr_section_macros.h>
 
-
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
-#include "queue"
+#include "queue.h"
 
 #include "user_vcom.h"
-#include "DigitalIoPin.h"
 #include "GCodeParser.h"
+#include "StepperController.h"
+#include "DigitalIoPin.h"
+#include "StepperMotor.h"
 
 GCodeParser* parser;
-StepperController* stepContr;
+StepperController* stepController;
 
 QueueHandle_t commandQueue;
 
@@ -40,12 +41,13 @@ static void prvSetupHardware(void) {
 }
 
 extern "C" {
+#if 0
 void RIT_IRQHandler(void) {
 	// This used to check if a context switch is required
 	portBASE_TYPE xHigherPriorityWoken = pdFALSE;
 	// Tell timer that we have processed the interrupt.
 	// Timer then removes the IRQ until next match occurs
-	Chip_RIT_ClearIntStatus(LPC_RITIMER); // clear IRQ flag
+	Chip_RIT_ClearIntStatus(LPC_RITIMER);// clear IRQ flag
 
 	if (RIT_count > 0) {
 		RIT_count--;
@@ -64,6 +66,7 @@ void RIT_IRQHandler(void) {
 	// End the ISR and (possibly) do a context switch
 	portEND_SWITCHING_ISR(xHigherPriorityWoken);
 }
+#endif
 
 void vConfigureTimerForRunTimeStats(void) {
 	Chip_SCT_Init(LPC_SCTSMALL1);
@@ -74,26 +77,20 @@ void vConfigureTimerForRunTimeStats(void) {
 
 /* TASKS */
 
-//dunno lel
-int coordX = 0, coordY = 0;
-
 static void vParserTask(void *pvParameters) {
 	vTaskDelay(10);
 	char buffer[40];
-	while(1) {
+	while (1) {
 		parser->read();
-		sprintf(buffer, "X: %0.2f Y: %0.2f\n", parser->getXCoord(), parser->getYCoord());
+		sprintf(buffer, "X: %0.2f Y: %0.2f\n", parser->getXCoord(),
+				parser->getYCoord());
 		ITM_write(buffer);
 	}
 }
 
 static void vStepperTask(void *pvParameters) {
-
-	stepContr = new StepperController();
-	stepContr->Calibrate(stepContr->motorX);
-	stepContr->Calibrate(stepContr->motorY);
-
-	while(1) {
+	stepController->Calibrate();
+	while (1) {
 		vTaskDelay(10);
 	}
 }
@@ -109,15 +106,15 @@ int main(void) {
 	parser = new GCodeParser();
 
 	//Create stepper controller object which will crete 2 motor objects in its constructor
-	stepContr = new StepperController();
+	stepController = new StepperController();
 
 	commandQueue = xQueueCreate(10, sizeof(int));
 
 	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 5, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
-	xTaskCreate(vParserTask, "vStepperTask", configMINIMAL_STACK_SIZE * 5, NULL,
-				(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
+	xTaskCreate(vStepperTask, "vStepperTask", configMINIMAL_STACK_SIZE * 5, NULL,
+			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(cdc_task, "CDC", configMINIMAL_STACK_SIZE * 5, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
