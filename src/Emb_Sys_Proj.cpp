@@ -48,6 +48,7 @@ void vConfigureTimerForRunTimeStats(void) {
 }
 
 static void vParserTask(void *pvParameters) {
+	vTaskDelay(10);
 	while(1) {
 		parser->read();
 
@@ -66,7 +67,7 @@ int main(void) {
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(cdc_task, "CDC", configMINIMAL_STACK_SIZE * 5, NULL,
-			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
+			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
 	vTaskStartScheduler();
 }

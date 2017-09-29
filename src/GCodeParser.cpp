@@ -30,8 +30,6 @@ void GCodeParser::read() {
 		ITM_write("[");
 		ITM_write(buffStr);
 		ITM_write("]\n");
-		vTaskDelay(50);
-		USB_send((uint8_t *)buffStr+1, len-1);
 		if (strncmp(buffStr, "M10", 3) == 0) {
 			USB_send((uint8_t *) M10Ans, strlen(M10Ans));
 			USB_send((uint8_t *) okAns, strlen(okAns));

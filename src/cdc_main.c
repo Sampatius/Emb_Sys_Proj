@@ -262,7 +262,7 @@ void cdc_task(void *pvParameters)
 		}
 #ifndef POLLING_CDC
 		/* Sleep until next IRQ happens */
-		xSemaphoreTake(xCDCEventSemaphore, configTICK_RATE_HZ / 50);
+		//xSemaphoreTake(xCDCEventSemaphore, configTICK_RATE_HZ / 50);
 #endif
 		/* If we have no pending data to send check if there is data in the queue */
 		if(snd.dlen == 0) {
