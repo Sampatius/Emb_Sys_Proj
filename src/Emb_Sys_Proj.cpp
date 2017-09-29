@@ -79,9 +79,11 @@ int coordX = 0, coordY = 0;
 
 static void vParserTask(void *pvParameters) {
 	vTaskDelay(10);
+	char buffer[40];
 	while(1) {
 		parser->read();
-
+		sprintf(buffer, "X: %0.2f Y: %0.2f\n", parser->getXCoord(), parser->getYCoord());
+		ITM_write(buffer);
 	}
 }
 
