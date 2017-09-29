@@ -12,10 +12,11 @@ class StepperController {
 public:
 	StepperController();
 	virtual ~StepperController();
+	void DriveMotor(StepperMotor motor, int coord);
+	void Calibrate();
+
 	StepperMotor* motorX, motorY;
 private:
-	void Calibrate();
-	void DriveMotor(int coord);
 };
 
 #endif /* STEPPERCONTROLLER_H_ */
