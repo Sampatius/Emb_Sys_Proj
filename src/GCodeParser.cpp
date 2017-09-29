@@ -26,14 +26,22 @@ void GCodeParser::read() {
 		for (uint32_t i = 0; i < len; ++i) {
 			buffStr[i] = str[i];
 		}
-		if (strncmp(buffStr, "M10", 4)) {
-			USB_send((uint8_t *) mkInit, strlen(mkInit));
-			USB_send((uint8_t *) okResponse, strlen(okResponse));
-		} else if (strncmp(buffStr, "M1", 3)) {
-			USB_send((uint8_t *) okResponse, strlen(okResponse));
+		buffStr[len] = 0;
+		ITM_write("[");
+		ITM_write(buffStr);
+		ITM_write("]\n");
+		vTaskDelay(50);
+		USB_send((uint8_t *)buffStr+1, len-1);
+		if (strncmp(buffStr, "M10", 3) == 0) {
+			USB_send((uint8_t *) M10Ans, strlen(M10Ans));
+			USB_send((uint8_t *) okAns, strlen(okAns));
+		} else if (strncmp(buffStr, "M1", 2) == 0) {
+			USB_send((uint8_t *) okAns, strlen(okAns));
 
-		} else if (strncmp(buffStr, "G1", 3)) {
-			USB_send((uint8_t *) okResponse, strlen(okResponse));
+		} else if (strncmp(buffStr, "G1", 2) == 0) {
+			USB_send((uint8_t *) okAns, strlen(okAns));
+		} else {
+			USB_send((uint8_t *) okAns, strlen(okAns));
 		}
 	}
 }

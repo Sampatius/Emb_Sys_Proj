@@ -50,13 +50,15 @@ void vConfigureTimerForRunTimeStats(void) {
 static void vParserTask(void *pvParameters) {
 	while(1) {
 		parser->read();
-		vTaskDelay(10);
+
 	}
 }
 
 int main(void) {
 
 	prvSetupHardware();
+
+	ITM_init();
 
 	parser = new GCodeParser();
 
