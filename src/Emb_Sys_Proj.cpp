@@ -18,20 +18,21 @@
 
 #include <cr_section_macros.h>
 
-// TODO: insert other include files here
 
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
+#include "queue"
 
 #include "user_vcom.h"
 #include "DigitalIoPin.h"
 #include "GCodeParser.h"
 
-// TODO: insert other definitions and declarations here
-
 GCodeParser* parser;
+StepperController* stepContr;
+
+QueueHandle_t commandQueue;
 
 static void prvSetupHardware(void) {
 	SystemCoreClockUpdate();
@@ -47,6 +48,8 @@ void vConfigureTimerForRunTimeStats(void) {
 }
 }
 
+/* TASKS */
+
 static void vParserTask(void *pvParameters) {
 	while(1) {
 		parser->read();
@@ -54,14 +57,36 @@ static void vParserTask(void *pvParameters) {
 	}
 }
 
+static void vStepperTask(void *pvParameters) {
+
+	stepContr = new StepperController();
+	stepContr->Calibrate(stepContr->motorX);
+	stepContr->Calibrate(stepContr->motorY);
+
+	while(1) {
+
+		vTaskDelay(10);
+	}
+}
+
+/* END OF TASKS */
+
 int main(void) {
 
 	prvSetupHardware();
 
 	parser = new GCodeParser();
 
+	//Create stepper controller object which will crete 2 motor objects in its constructor
+	stepContr = new StepperController();
+
+	commandQueue = xQueueCreate(10, sizeof(int));
+
 	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 5, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
+
+	xTaskCreate(vParserTask, "vStepperTask", configMINIMAL_STACK_SIZE * 5, NULL,
+				(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(cdc_task, "CDC", configMINIMAL_STACK_SIZE * 5, NULL,
 			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
