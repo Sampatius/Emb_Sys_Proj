@@ -26,10 +26,6 @@ void GCodeParser::read() {
 		for (uint32_t i = 0; i < len; ++i) {
 			buffStr[i] = str[i];
 		}
-		buffStr[len] = 0;
-		ITM_write("[");
-		ITM_write(buffStr);
-		ITM_write("]\n");
 		if (strncmp(buffStr, "M10", 3) == 0) {
 			USB_send((uint8_t *) M10Ans, strlen(M10Ans));
 			USB_send((uint8_t *) okAns, strlen(okAns));
@@ -38,8 +34,35 @@ void GCodeParser::read() {
 
 		} else if (strncmp(buffStr, "G1", 2) == 0) {
 			USB_send((uint8_t *) okAns, strlen(okAns));
+			parseCoords(buffStr);
 		} else {
 			USB_send((uint8_t *) okAns, strlen(okAns));
+		}
+	}
+}
+
+void GCodeParser::parseCoords(char* buffer) {
+	char temp[8];
+	int tempIndex = 0;
+	double xCoord = 0;
+	double yCoord = 0;
+	for (int i = 0; i < strlen(buffer); i++) {
+		if (buffer[i] == 'X') {
+			for (int j = i + 1; isspace(buffer[j]) == false; ++j) {
+				temp[tempIndex] = buffer[j];
+				tempIndex++;
+			}
+			xCoord = atof(temp);
+			xCoord_ = xCoord;
+		}
+		int tempIndex = 0;
+		if (buffer[i] == 'Y') {
+			for (int k = i + 1; isspace(buffer[k]) == false; ++k) {
+				temp[tempIndex] = buffer[k];
+				tempIndex++;
+			}
+			yCoord = atof(temp);
+			yCoord_ = yCoord;
 		}
 	}
 }
