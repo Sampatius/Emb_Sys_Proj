@@ -51,9 +51,10 @@ void vConfigureTimerForRunTimeStats(void) {
 /* TASKS */
 
 static void vParserTask(void *pvParameters) {
+	vTaskDelay(10);
 	while(1) {
 		parser->read();
-		vTaskDelay(10);
+
 	}
 }
 
@@ -75,6 +76,8 @@ int main(void) {
 
 	prvSetupHardware();
 
+	ITM_init();
+
 	parser = new GCodeParser();
 
 	//Create stepper controller object which will crete 2 motor objects in its constructor
@@ -89,7 +92,7 @@ int main(void) {
 				(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(cdc_task, "CDC", configMINIMAL_STACK_SIZE * 5, NULL,
-			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
+			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
 	vTaskStartScheduler();
 }

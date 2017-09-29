@@ -23,17 +23,23 @@ void GCodeParser::read() {
 
 	len = USB_receive((uint8_t *) str, 96);
 	if (len > 0) {
-		for (int i = 0; i < len; ++i) {
+		for (uint32_t i = 0; i < len; ++i) {
 			buffStr[i] = str[i];
 		}
-		if (buffStr[0] == 'M' && buffStr[1] == '1' && buffStr[2] == ' ') {
-			USB_send((uint8_t *) okResponse, strlen(okResponse));
-		} else if (buffStr[0] == 'M' && buffStr[1] == '1'
-				&& buffStr[2] == '0') {
-			USB_send((uint8_t *) mkInit, strlen(mkInit));
-			USB_send((uint8_t *) okResponse, strlen(okResponse));
-		} else if (buffStr[0] == 'G' && buffStr[1] == '1') {
-			USB_send((uint8_t *) okResponse, strlen(okResponse));
+		buffStr[len] = 0;
+		ITM_write("[");
+		ITM_write(buffStr);
+		ITM_write("]\n");
+		if (strncmp(buffStr, "M10", 3) == 0) {
+			USB_send((uint8_t *) M10Ans, strlen(M10Ans));
+			USB_send((uint8_t *) okAns, strlen(okAns));
+		} else if (strncmp(buffStr, "M1", 2) == 0) {
+			USB_send((uint8_t *) okAns, strlen(okAns));
+
+		} else if (strncmp(buffStr, "G1", 2) == 0) {
+			USB_send((uint8_t *) okAns, strlen(okAns));
+		} else {
+			USB_send((uint8_t *) okAns, strlen(okAns));
 		}
 	}
 }
