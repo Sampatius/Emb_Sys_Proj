@@ -40,6 +40,30 @@ static void prvSetupHardware(void) {
 }
 
 extern "C" {
+void RIT_IRQHandler(void) {
+	// This used to check if a context switch is required
+	portBASE_TYPE xHigherPriorityWoken = pdFALSE;
+	// Tell timer that we have processed the interrupt.
+	// Timer then removes the IRQ until next match occurs
+	Chip_RIT_ClearIntStatus(LPC_RITIMER); // clear IRQ flag
+
+	if (RIT_count > 0) {
+		RIT_count--;
+		// do something useful here...
+		state = !state;
+		step->write(state);
+
+		if (limSw1->read() || limSw2->read()) {
+			RIT_count = 0;
+		}
+	} else {
+		Chip_RIT_Disable(LPC_RITIMER); // disable timer
+		// Give semaphore and set context switch flag if a higher priority task was woken up
+		xSemaphoreGiveFromISR(sbRIT, &xHigherPriorityWoken);
+	}
+	// End the ISR and (possibly) do a context switch
+	portEND_SWITCHING_ISR(xHigherPriorityWoken);
+}
 
 void vConfigureTimerForRunTimeStats(void) {
 	Chip_SCT_Init(LPC_SCTSMALL1);
@@ -49,6 +73,9 @@ void vConfigureTimerForRunTimeStats(void) {
 }
 
 /* TASKS */
+
+//dunno lel
+int coordX = 0, coordY = 0;
 
 static void vParserTask(void *pvParameters) {
 	vTaskDelay(10);
@@ -65,7 +92,6 @@ static void vStepperTask(void *pvParameters) {
 	stepContr->Calibrate(stepContr->motorY);
 
 	while(1) {
-
 		vTaskDelay(10);
 	}
 }
