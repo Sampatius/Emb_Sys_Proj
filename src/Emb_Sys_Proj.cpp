@@ -27,8 +27,11 @@
 #include "user_vcom.h"
 #include "GCodeParser.h"
 #include "DigitalIoPin.h"
+#include "Motor.h"
 
 GCodeParser* parser;
+Motor *xMotor;
+Motor *yMotor;
 
 QueueHandle_t commandQueue;
 
@@ -86,6 +89,7 @@ static void vParserTask(void *pvParameters) {
 }
 
 static void vStepperTask(void *pvParameters) {
+	xMotor->calibrate();
 	while (1) {
 		vTaskDelay(10);
 	}
@@ -101,13 +105,20 @@ int main(void) {
 
 	parser = new GCodeParser();
 
+	DigitalIoPin xStep(0, 24, DigitalIoPin::output, true);
+	DigitalIoPin xDir(1, 0, DigitalIoPin::output, true);
+	DigitalIoPin xLimitStart(0, 27, DigitalIoPin::pullup, true);
+	DigitalIoPin xLimitEnd(0, 28, DigitalIoPin::pullup, true);
+
+	xMotor = new Motor(xDir, xStep, xLimitStart, xLimitEnd);
+
 	commandQueue = xQueueCreate(10, sizeof(int));
 
 	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 5, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
-	xTaskCreate(vStepperTask, "vStepperTask", configMINIMAL_STACK_SIZE * 5, NULL,
-			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
+	xTaskCreate(vStepperTask, "vStepperTask", configMINIMAL_STACK_SIZE * 5,
+			NULL, (tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(cdc_task, "CDC", configMINIMAL_STACK_SIZE * 5, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
