@@ -35,6 +35,16 @@ Motor *yMotor;
 
 QueueHandle_t commandQueue;
 
+struct coordObject {
+	double xCoord, yCoord;
+	coordObject(double xCoord_, double yCoord_);
+};
+
+coordObject::coordObject(double xCoord_, double yCoord_) {
+	xCoord = xCoord_;
+	yCoord = yCoord_;
+}
+
 static void prvSetupHardware(void) {
 	SystemCoreClockUpdate();
 	Board_Init();
@@ -78,19 +88,24 @@ void vConfigureTimerForRunTimeStats(void) {
 /* TASKS */
 
 static void vParserTask(void *pvParameters) {
-	vTaskDelay(10);
 	char buffer[40];
 	while (1) {
 		parser->read();
-		sprintf(buffer, "X: %0.2f Y: %0.2f\n", parser->getXCoord(),
+		coordObject o(parser->getXCoord(), parser->getYCoord());
+		xQueueSendToBack(commandQueue, &o, portMAX_DELAY);
+		sprintf(buffer, "vParser - X: %0.2f Y: %0.2f\n", parser->getXCoord(),
 				parser->getYCoord());
 		ITM_write(buffer);
 	}
 }
 
 static void vStepperTask(void *pvParameters) {
+	coordObject *o;
+	char buffer[40];
 	xMotor->calibrate();
 	while (1) {
+		xQueueReceive(commandQueue, &o, portMAX_DELAY);
+		sprintf(buffer, "vStepper - X: %02f Y: %0.2f", o->xCoord, o->yCoord);
 		vTaskDelay(10);
 	}
 }
@@ -112,7 +127,7 @@ int main(void) {
 
 	xMotor = new Motor(xDir, xStep, xLimitStart, xLimitEnd);
 
-	commandQueue = xQueueCreate(10, sizeof(int));
+	commandQueue = xQueueCreate(10, sizeof(coordObject));
 
 	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 5, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
