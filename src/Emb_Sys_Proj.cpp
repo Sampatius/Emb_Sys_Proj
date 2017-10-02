@@ -26,12 +26,9 @@
 
 #include "user_vcom.h"
 #include "GCodeParser.h"
-#include "StepperController.h"
 #include "DigitalIoPin.h"
-#include "StepperMotor.h"
 
 GCodeParser* parser;
-StepperController* stepController;
 
 QueueHandle_t commandQueue;
 
@@ -89,7 +86,6 @@ static void vParserTask(void *pvParameters) {
 }
 
 static void vStepperTask(void *pvParameters) {
-	stepController->Calibrate();
 	while (1) {
 		vTaskDelay(10);
 	}
@@ -104,9 +100,6 @@ int main(void) {
 	ITM_init();
 
 	parser = new GCodeParser();
-
-	//Create stepper controller object which will crete 2 motor objects in its constructor
-	stepController = new StepperController();
 
 	commandQueue = xQueueCreate(10, sizeof(int));
 
