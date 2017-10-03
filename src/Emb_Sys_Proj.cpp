@@ -88,6 +88,8 @@ void vConfigureTimerForRunTimeStats(void) {
 /* TASKS */
 
 static void vParserTask(void *pvParameters) {
+	//Wait for USB serial to initialize
+	vTaskDelay(10);
 	char buffer[40];
 	while (1) {
 		parser->read();
@@ -102,7 +104,7 @@ static void vParserTask(void *pvParameters) {
 static void vStepperTask(void *pvParameters) {
 	coordObject *o;
 	char buffer[40];
-	xMotor->calibrate();
+	//xMotor->calibrate();
 	while (1) {
 		xQueueReceive(commandQueue, &o, portMAX_DELAY);
 		sprintf(buffer, "vStepper - X: %02f Y: %0.2f", o->xCoord, o->yCoord);
