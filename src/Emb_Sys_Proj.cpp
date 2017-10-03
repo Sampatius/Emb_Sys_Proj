@@ -36,13 +36,20 @@ Motor *yMotor;
 QueueHandle_t commandQueue;
 
 struct coordObject {
-	double xCoord, yCoord;
+	double xCoord = 0, yCoord = 0, oldX = 0, oldY = 0;
+	coordObject();
 	coordObject(double xCoord_, double yCoord_);
 };
+
+coordObject::coordObject() {
+
+}
 
 coordObject::coordObject(double xCoord_, double yCoord_) {
 	xCoord = xCoord_;
 	yCoord = yCoord_;
+	oldX = xCoord;
+	oldY = yCoord;
 }
 
 static void prvSetupHardware(void) {
@@ -90,24 +97,31 @@ void vConfigureTimerForRunTimeStats(void) {
 static void vParserTask(void *pvParameters) {
 	//Wait for USB serial to initialize
 	vTaskDelay(10);
-	char buffer[40];
+	char buffer[64];
 	while (1) {
-		parser->read();
-		coordObject o(parser->getXCoord(), parser->getYCoord());
-		xQueueSendToBack(commandQueue, &o, portMAX_DELAY);
-		sprintf(buffer, "vParser - X: %0.2f Y: %0.2f\n", parser->getXCoord(),
-				parser->getYCoord());
-		ITM_write(buffer);
+		if (parser->read()) {
+			double xCoord = parser->getXCoord();
+			double yCoord = parser->getYCoord();
+			coordObject o(xCoord, yCoord);
+			xQueueSendToBack(commandQueue, &o, portMAX_DELAY);
+			sprintf(buffer, "vP X: %0.2f Y: %0.2f\n", xCoord, yCoord);
+			ITM_write(buffer);
+		}
+		else {
+			ITM_write("No coords.\n");
+		}
 	}
 }
 
 static void vStepperTask(void *pvParameters) {
-	coordObject *o;
-	char buffer[40];
-	//xMotor->calibrate();
+	coordObject o;
+	char buffer[64];
+
+	xMotor->calibrate();
 	while (1) {
 		xQueueReceive(commandQueue, &o, portMAX_DELAY);
-		sprintf(buffer, "vStepper - X: %02f Y: %0.2f", o->xCoord, o->yCoord);
+		sprintf(buffer, "vS X: %02f Y: %0.2f", o.xCoord, o.yCoord);
+		ITM_write(buffer);
 		vTaskDelay(10);
 	}
 }
@@ -131,7 +145,7 @@ int main(void) {
 
 	commandQueue = xQueueCreate(10, sizeof(coordObject));
 
-	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 5, NULL,
+	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 8, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(vStepperTask, "vStepperTask", configMINIMAL_STACK_SIZE * 5,

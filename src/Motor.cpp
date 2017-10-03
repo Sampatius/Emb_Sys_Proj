@@ -16,7 +16,7 @@ Motor::~Motor() {
 	// TODO Auto-generated destructor stub
 }
 
-void Motor::ride(bool direction) {
+void Motor::drive(bool direction) {
 	dir.write(direction);
 	step.write(true);
 	step.write(false);
@@ -30,14 +30,15 @@ void Motor::calibrate() {
 		}
 		else if(limitEnd.read()) {
 			direction = !direction;
-			while (limitEnd.read()) {
-				ride(direction);
+			for(int i = 0; i < (steps * 0.02); i++) {
+				drive(direction);
+				vTaskDelay(5);
 			}
-			steps = steps * 0.94;
+			steps = steps * 0.97;
 			calibrated = true;
 		}
 		steps++;
-		ride(direction);
+		drive(direction);
 		vTaskDelay(5);
 	}
 }

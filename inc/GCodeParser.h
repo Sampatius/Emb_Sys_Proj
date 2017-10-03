@@ -21,7 +21,7 @@ public:
 	GCodeParser();
 	virtual ~GCodeParser();
 
-	void read();
+	bool read();
 
 	inline double getXCoord() { return xCoord_; }
 	inline double getYCoord() { return yCoord_; }
