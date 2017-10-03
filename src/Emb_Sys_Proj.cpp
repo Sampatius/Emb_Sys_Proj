@@ -29,6 +29,9 @@
 #include "DigitalIoPin.h"
 #include "Motor.h"
 
+volatile uint32_t xSteps, ySteps;
+xSemaphoreHandle sbRIT;
+
 GCodeParser* parser;
 Motor *xMotor;
 Motor *yMotor;
@@ -58,7 +61,8 @@ static void prvSetupHardware(void) {
 }
 
 extern "C" {
-#if 0
+#if 1
+bool xDir, yDir;
 void RIT_IRQHandler(void) {
 	// This used to check if a context switch is required
 	portBASE_TYPE xHigherPriorityWoken = pdFALSE;
@@ -66,16 +70,23 @@ void RIT_IRQHandler(void) {
 	// Timer then removes the IRQ until next match occurs
 	Chip_RIT_ClearIntStatus(LPC_RITIMER);// clear IRQ flag
 
-	if (RIT_count > 0) {
-		RIT_count--;
-		// do something useful here...
-		state = !state;
-		step->write(state);
+	if (xSteps > 0) {
+		xSteps--;
+		xMotor->drive(xDir);
 
+		/* maybe implement rit stopper if limit switches are hit
 		if (limSw1->read() || limSw2->read()) {
 			RIT_count = 0;
-		}
-	} else {
+		}*/
+	}
+
+	if (ySteps > 0) {
+		ySteps--;
+		yMotor->drive(yDir);
+
+	}
+	//when both steps have been driven stop
+	if (xSteps <= 0 && ySteps <= 0) {
 		Chip_RIT_Disable(LPC_RITIMER); // disable timer
 		// Give semaphore and set context switch flag if a higher priority task was woken up
 		xSemaphoreGiveFromISR(sbRIT, &xHigherPriorityWoken);
@@ -91,6 +102,36 @@ void vConfigureTimerForRunTimeStats(void) {
 	LPC_SCTSMALL1->CTRL_U = SCT_CTRL_PRE_L(255) | SCT_CTRL_CLRCTR_L; // set prescaler to 256 (255 + 1), and start timer
 }
 }
+
+
+void RIT_start(int xCount, int yCount, int us) {
+	uint64_t cmp_value;
+	// Determine approximate compare value based on clock rate and passed interval
+	cmp_value = (uint64_t) Chip_Clock_GetSystemClockRate() * (uint64_t) us
+			/ 1000000;
+	// disable timer during configuration
+	Chip_RIT_Disable(LPC_RITIMER);
+	xSteps = xCount;
+	ySteps = yCount;
+	// enable automatic clear on when compare value==timer value
+	// this makes interrupts trigger periodically
+	Chip_RIT_EnableCompClear(LPC_RITIMER);
+	// reset the counter
+	Chip_RIT_SetCounter(LPC_RITIMER, 0);
+	Chip_RIT_SetCompareValue(LPC_RITIMER, cmp_value);
+	// start counting
+	Chip_RIT_Enable(LPC_RITIMER);
+	// Enable the interrupt signal in NVIC (the interrupt controller)
+	NVIC_EnableIRQ(RITIMER_IRQn);
+	// wait for ISR to tell that we're done
+	if (xSemaphoreTake(sbRIT, portMAX_DELAY) == pdTRUE) {
+		// Disable the interrupt signal in NVIC (the interrupt controller)
+		NVIC_DisableIRQ(RITIMER_IRQn);
+	} else {
+		// unexpected error
+	}
+}
+
 
 /* TASKS */
 
@@ -114,6 +155,7 @@ static void vParserTask(void *pvParameters) {
 }
 
 static void vStepperTask(void *pvParameters) {
+<<<<<<< HEAD
 	coordObject o;
 	char buffer[64];
 
@@ -122,6 +164,22 @@ static void vStepperTask(void *pvParameters) {
 		xQueueReceive(commandQueue, &o, portMAX_DELAY);
 		sprintf(buffer, "vS X: %02f Y: %0.2f", o.xCoord, o.yCoord);
 		ITM_write(buffer);
+=======
+	double lastX, lastY;
+
+	coordObject o;
+	char buffer[40];
+	//xMotor->calibrate();
+
+	BaseType_t xStatus;
+
+	while (1) {
+		xStatus = xQueueReceive(commandQueue, &o, portMAX_DELAY);
+		if (xStatus == pdTRUE){
+			RIT_start(o.xCoord, o.yCoord, 1000000/ 2000);
+			sprintf(buffer, "vStepper - X: %02f Y: %0.2f", o.xCoord, o.yCoord);
+		}
+>>>>>>> Interrupt
 		vTaskDelay(10);
 	}
 }
@@ -131,6 +189,7 @@ static void vStepperTask(void *pvParameters) {
 int main(void) {
 
 	prvSetupHardware();
+	sbRIT = xSemaphoreCreateBinary();
 
 	ITM_init();
 

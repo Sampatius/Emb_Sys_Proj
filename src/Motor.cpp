@@ -30,9 +30,14 @@ void Motor::calibrate() {
 		}
 		else if(limitEnd.read()) {
 			direction = !direction;
+<<<<<<< HEAD
 			for(int i = 0; i < (steps * 0.02); i++) {
 				drive(direction);
 				vTaskDelay(5);
+=======
+			while (limitEnd.read()) {
+				drive(direction);
+>>>>>>> Interrupt
 			}
 			steps = steps * 0.97;
 			calibrated = true;
