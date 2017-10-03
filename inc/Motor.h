@@ -25,7 +25,7 @@ public:
 	inline DigitalIoPin getLimitEnd() { return limitEnd; }
 
 	//Class functions
-	void ride(bool direction);
+	void drive(bool direction);
 	void calibrate();
 
 private:
