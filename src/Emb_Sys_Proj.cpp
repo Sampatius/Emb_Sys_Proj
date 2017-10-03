@@ -94,14 +94,6 @@ void RIT_IRQHandler(void) {
 	// End the ISR and (possibly) do a context switch
 	portEND_SWITCHING_ISR(xHigherPriorityWoken);
 }
-#endif
-
-void vConfigureTimerForRunTimeStats(void) {
-	Chip_SCT_Init(LPC_SCTSMALL1);
-	LPC_SCTSMALL1->CONFIG = SCT_CONFIG_32BIT_COUNTER;
-	LPC_SCTSMALL1->CTRL_U = SCT_CTRL_PRE_L(255) | SCT_CTRL_CLRCTR_L; // set prescaler to 256 (255 + 1), and start timer
-}
-}
 
 void RIT_start(int xCount, int yCount, int us) {
 	uint64_t cmp_value;
@@ -129,6 +121,15 @@ void RIT_start(int xCount, int yCount, int us) {
 	} else {
 		// unexpected error
 	}
+}
+
+#endif
+
+void vConfigureTimerForRunTimeStats(void) {
+	Chip_SCT_Init(LPC_SCTSMALL1);
+	LPC_SCTSMALL1->CONFIG = SCT_CONFIG_32BIT_COUNTER;
+	LPC_SCTSMALL1->CTRL_U = SCT_CTRL_PRE_L(255) | SCT_CTRL_CLRCTR_L; // set prescaler to 256 (255 + 1), and start timer
+}
 }
 
 /* TASKS */
@@ -160,24 +161,9 @@ static void vStepperTask(void *pvParameters) {
 		xQueueReceive(commandQueue, &o, portMAX_DELAY);
 		sprintf(buffer, "vS X: %02f Y: %0.2f", o.xCoord, o.yCoord);
 		ITM_write(buffer);
-		double lastX, lastY;
-
-		coordObject o;
-		char buffer[40];
-		//xMotor->calibrate();
-
-		BaseType_t xStatus;
-
-		while (1) {
-			xStatus = xQueueReceive(commandQueue, &o, portMAX_DELAY);
-			if (xStatus == pdTRUE) {
-				RIT_start(o.xCoord, o.yCoord, 1000000 / 2000);
-				sprintf(buffer, "vStepper - X: %02f Y: %0.2f", o.xCoord,
-						o.yCoord);
-			}
-			vTaskDelay(10);
-		}
+		RIT_start(o.xCoord, o.yCoord, 1000000 / 2000);
 	}
+	vTaskDelay(10);
 }
 
 /* END OF TASKS */
@@ -199,6 +185,11 @@ int main(void) {
 	xMotor = new Motor(xDir, xStep, xLimitStart, xLimitEnd);
 
 	commandQueue = xQueueCreate(10, sizeof(coordObject));
+
+	Chip_RIT_Init(LPC_RITIMER);
+
+	NVIC_SetPriority(RITIMER_IRQn,
+	configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
 	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 8, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
