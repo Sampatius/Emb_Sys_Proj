@@ -68,16 +68,16 @@ void RIT_IRQHandler(void) {
 	portBASE_TYPE xHigherPriorityWoken = pdFALSE;
 	// Tell timer that we have processed the interrupt.
 	// Timer then removes the IRQ until next match occurs
-	Chip_RIT_ClearIntStatus(LPC_RITIMER);// clear IRQ flag
+	Chip_RIT_ClearIntStatus(LPC_RITIMER);	// clear IRQ flag
 
 	if (xSteps > 0) {
 		xSteps--;
 		xMotor->drive(xDir);
 
 		/* maybe implement rit stopper if limit switches are hit
-		if (limSw1->read() || limSw2->read()) {
-			RIT_count = 0;
-		}*/
+		 if (limSw1->read() || limSw2->read()) {
+		 RIT_count = 0;
+		 }*/
 	}
 
 	if (ySteps > 0) {
@@ -102,7 +102,6 @@ void vConfigureTimerForRunTimeStats(void) {
 	LPC_SCTSMALL1->CTRL_U = SCT_CTRL_PRE_L(255) | SCT_CTRL_CLRCTR_L; // set prescaler to 256 (255 + 1), and start timer
 }
 }
-
 
 void RIT_start(int xCount, int yCount, int us) {
 	uint64_t cmp_value;
@@ -132,7 +131,6 @@ void RIT_start(int xCount, int yCount, int us) {
 	}
 }
 
-
 /* TASKS */
 
 static void vParserTask(void *pvParameters) {
@@ -147,15 +145,13 @@ static void vParserTask(void *pvParameters) {
 			xQueueSendToBack(commandQueue, &o, portMAX_DELAY);
 			sprintf(buffer, "vP X: %0.2f Y: %0.2f\n", xCoord, yCoord);
 			ITM_write(buffer);
-		}
-		else {
+		} else {
 			ITM_write("No coords.\n");
 		}
 	}
 }
 
 static void vStepperTask(void *pvParameters) {
-<<<<<<< HEAD
 	coordObject o;
 	char buffer[64];
 
@@ -164,23 +160,23 @@ static void vStepperTask(void *pvParameters) {
 		xQueueReceive(commandQueue, &o, portMAX_DELAY);
 		sprintf(buffer, "vS X: %02f Y: %0.2f", o.xCoord, o.yCoord);
 		ITM_write(buffer);
-=======
-	double lastX, lastY;
+		double lastX, lastY;
 
-	coordObject o;
-	char buffer[40];
-	//xMotor->calibrate();
+		coordObject o;
+		char buffer[40];
+		//xMotor->calibrate();
 
-	BaseType_t xStatus;
+		BaseType_t xStatus;
 
-	while (1) {
-		xStatus = xQueueReceive(commandQueue, &o, portMAX_DELAY);
-		if (xStatus == pdTRUE){
-			RIT_start(o.xCoord, o.yCoord, 1000000/ 2000);
-			sprintf(buffer, "vStepper - X: %02f Y: %0.2f", o.xCoord, o.yCoord);
+		while (1) {
+			xStatus = xQueueReceive(commandQueue, &o, portMAX_DELAY);
+			if (xStatus == pdTRUE) {
+				RIT_start(o.xCoord, o.yCoord, 1000000 / 2000);
+				sprintf(buffer, "vStepper - X: %02f Y: %0.2f", o.xCoord,
+						o.yCoord);
+			}
+			vTaskDelay(10);
 		}
->>>>>>> Interrupt
-		vTaskDelay(10);
 	}
 }
 

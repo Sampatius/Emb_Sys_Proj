@@ -7,8 +7,10 @@
 
 #include "Motor.h"
 
-Motor::Motor(DigitalIoPin dir_, DigitalIoPin step_, DigitalIoPin limitStart_, DigitalIoPin limitEnd_) :
-		dir(dir_), step(step_), limitStart(limitStart_), limitEnd(limitEnd_), steps(0) {
+Motor::Motor(DigitalIoPin dir_, DigitalIoPin step_, DigitalIoPin limitStart_,
+		DigitalIoPin limitEnd_) :
+		dir(dir_), step(step_), limitStart(limitStart_), limitEnd(limitEnd_), steps(
+				0) {
 
 }
 
@@ -23,27 +25,24 @@ void Motor::drive(bool direction) {
 }
 
 void Motor::calibrate() {
-	while(!calibrated) {
-		if(limitStart.read()) {
+	while (!calibrated) {
+		if (limitStart.read()) {
 			direction = !direction;
 			steps = 0;
-		}
-		else if(limitEnd.read()) {
+		} else if (limitEnd.read()) {
 			direction = !direction;
-<<<<<<< HEAD
-			for(int i = 0; i < (steps * 0.02); i++) {
+			for (int i = 0; i < (steps * 0.02); i++) {
 				drive(direction);
 				vTaskDelay(5);
-=======
-			while (limitEnd.read()) {
-				drive(direction);
->>>>>>> Interrupt
+				while (limitEnd.read()) {
+					drive(direction);
+				}
+				steps = steps * 0.97;
+				calibrated = true;
 			}
-			steps = steps * 0.97;
-			calibrated = true;
+			steps++;
+			drive(direction);
+			vTaskDelay(5);
 		}
-		steps++;
-		drive(direction);
-		vTaskDelay(5);
 	}
 }
