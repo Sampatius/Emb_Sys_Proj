@@ -23,9 +23,13 @@ public:
 	inline DigitalIoPin getStep() { return step; }
 	inline DigitalIoPin getLimitStart() { return limitStart; }
 	inline DigitalIoPin getLimitEnd() { return limitEnd; }
+	inline int getSteps() { return steps; }
+
+	void setDirection(bool direction);
 
 	//Class functions
 	void drive(bool direction);
+	void driveISR();
 	void calibrate();
 
 private:

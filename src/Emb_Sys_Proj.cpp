@@ -62,7 +62,6 @@ static void prvSetupHardware(void) {
 
 extern "C" {
 #if 1
-bool xDir, yDir;
 void RIT_IRQHandler(void) {
 	// This used to check if a context switch is required
 	portBASE_TYPE xHigherPriorityWoken = pdFALSE;
@@ -70,23 +69,30 @@ void RIT_IRQHandler(void) {
 	// Timer then removes the IRQ until next match occurs
 	Chip_RIT_ClearIntStatus(LPC_RITIMER);	// clear IRQ flag
 
+	//Drive xMotor
 	if (xSteps > 0) {
 		xSteps--;
-		xMotor->drive(xDir);
+		xMotor->driveISR();
 
-		/* maybe implement rit stopper if limit switches are hit
-		 if (limSw1->read() || limSw2->read()) {
-		 RIT_count = 0;
-		 }*/
+		//Stop if limit read
+		if (xMotor->getLimitStart().read() || xMotor->getLimitEnd().read()) {
+			xSteps = 0;
+		}
 	}
 
+	//Drive yMotor
 	if (ySteps > 0) {
 		ySteps--;
-		yMotor->drive(yDir);
+		yMotor->driveISR();
+
+		//Stop if limit read
+		if (yMotor->getLimitStart().read() || yMotor->getLimitEnd().read()) {
+			ySteps = 0;
+		}
 
 	}
 	//when both steps have been driven stop
-	if (xSteps <= 0 && ySteps <= 0) {
+	else if (xSteps <= 0) {
 		Chip_RIT_Disable(LPC_RITIMER); // disable timer
 		// Give semaphore and set context switch flag if a higher priority task was woken up
 		xSemaphoreGiveFromISR(sbRIT, &xHigherPriorityWoken);
@@ -134,6 +140,16 @@ void vConfigureTimerForRunTimeStats(void) {
 
 /* TASKS */
 
+static void vCalibrateX(void *pvParameters) {
+	xMotor->calibrate();
+	vTaskDelete(NULL);
+}
+
+static void vCalibrateY(void *pvParameters) {
+	yMotor->calibrate();
+	vTaskDelete(NULL);
+}
+
 static void vParserTask(void *pvParameters) {
 	//Wait for USB serial to initialize
 	vTaskDelay(10);
@@ -156,12 +172,67 @@ static void vStepperTask(void *pvParameters) {
 	coordObject o;
 	char buffer[64];
 
-	xMotor->calibrate();
+	int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+	int deltaX, deltaY;
+
+	bool xDominating;
+
 	while (1) {
 		xQueueReceive(commandQueue, &o, portMAX_DELAY);
 		sprintf(buffer, "vS X: %02f Y: %0.2f", o.xCoord, o.yCoord);
 		ITM_write(buffer);
-		RIT_start(o.xCoord, o.yCoord, 1000000 / 2000);
+
+		x0 = o.xCoord;
+		y0 = o.yCoord;
+
+		if (x0 > y0) {
+			xDominating = true;
+		}
+		else {
+			xDominating = false;
+		}
+
+		deltaX = x1 - x0;
+		deltaY = y1 - y0;
+
+		if (deltaX < 0) {
+			xMotor->setDirection(false);
+		}
+		else {
+			xMotor->setDirection(true);
+		}
+
+		if (deltaY < 0) {
+			yMotor->setDirection(true);
+		}
+		else {
+			yMotor->setDirection(false);
+		}
+
+		if (xDominating) {
+			while (abs(deltaX) > 0) {
+				if (deltaX % deltaY == 0) {
+					RIT_start(0, 2, 100000/2000);
+					deltaX--;
+				}
+				else {
+					RIT_start(2, 0, 1000000/2000);
+					deltaX--;
+				}
+			}
+		}
+		else {
+			while (abs(deltaY) > 0) {
+				if (deltaY % deltaX == 0) {
+					RIT_start(2, 0, 1000000/2000);
+					deltaY--;
+				}
+				else {
+					RIT_start(0, 2, 1000000/2000);
+					deltaY--;
+				}
+			}
+		}
 	}
 	vTaskDelay(10);
 }
@@ -182,7 +253,22 @@ int main(void) {
 	DigitalIoPin xLimitStart(0, 27, DigitalIoPin::pullup, true);
 	DigitalIoPin xLimitEnd(0, 28, DigitalIoPin::pullup, true);
 
+#if 1
+	DigitalIoPin yStep(0, 9, DigitalIoPin::output, true);
+	DigitalIoPin yDir(0, 29, DigitalIoPin::output, true);
+	DigitalIoPin yLimitStart(1, 9, DigitalIoPin::pullup, true);
+	DigitalIoPin yLimitEnd(1, 10, DigitalIoPin::pullup, true);
+#endif
+
+#if 0
+	DigitalIoPin yStep(1, 8, DigitalIoPin::output, true);
+	DigitalIoPin yDir(0, 5, DigitalIoPin::output, true);
+	DigitalIoPin yLimitStart(0, 6, DigitalIoPin::pullup, true);
+	DigitalIoPin yLimitEnd(0, 7, DigitalIoPin::pullup, true);
+#endif
+
 	xMotor = new Motor(xDir, xStep, xLimitStart, xLimitEnd);
+	yMotor = new Motor(yDir, yStep, yLimitStart, yLimitEnd);
 
 	commandQueue = xQueueCreate(10, sizeof(coordObject));
 
@@ -190,6 +276,12 @@ int main(void) {
 
 	NVIC_SetPriority(RITIMER_IRQn,
 	configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+
+	xTaskCreate(vCalibrateX, "vCalibrateX", configMINIMAL_STACK_SIZE * 8, NULL,
+				(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
+
+	xTaskCreate(vCalibrateY, "vCalibrateY", configMINIMAL_STACK_SIZE * 8, NULL,
+				(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 8, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
