@@ -257,6 +257,47 @@ static void vStepperTask(void *pvParameters) {
 				}
 			}
 		}
+
+		/*
+		 x2 = o.xCoord;
+		y2 = o.yCoord;
+
+		int dx=x2-x1;
+		int dy=y2-y1;
+		int x=x1;
+		int y=y1;
+
+		if (dx < 0) {
+			xMotor->setDirection(false);
+		}
+		else {
+			xMotor->setDirection(true);
+		}
+
+		if (dy < 0) {
+			yMotor->setDirection(true);
+		}
+		else {
+			yMotor->setDirection(false);
+		}
+
+
+		int e=(2*dy)-dx;
+		for (int i=0;i<=dx;i++)
+		{
+			RIT_start(x, y, 1000000 / 2000);
+			while(e>=0)
+			{
+				y=y+1;
+				e=e-(2*dx);
+			}
+			x=x+1;
+			e=e+(2*dy);
+		}
+
+		x1 = x;
+		y1 = y;
+		 */
 	}
 	vTaskDelay(10);
 }
