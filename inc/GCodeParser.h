@@ -21,12 +21,13 @@ public:
 	GCodeParser();
 	virtual ~GCodeParser();
 
-	bool read();
+	int read();
 
 	inline double getXCoord() { return xCoord_; }
 	inline double getYCoord() { return yCoord_; }
 
 private:
+
 	void parseCoords(char* buffer);
 
 	double xCoord_;

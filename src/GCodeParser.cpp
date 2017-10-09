@@ -16,7 +16,7 @@ GCodeParser::~GCodeParser() {
 	// TODO Auto-generated destructor stub
 }
 
-bool GCodeParser::read() {
+int GCodeParser::read() {
 	char str[96];
 	char buffStr[96];
 	uint32_t len = 0;
@@ -26,21 +26,21 @@ bool GCodeParser::read() {
 		for (uint32_t i = 0; i < len; ++i) {
 			buffStr[i] = str[i];
 		}
+		buffStr[len] = 0;
 		if (strncmp(buffStr, "M10", 3) == 0) {
 			USB_send((uint8_t *) M10Ans, strlen(M10Ans));
 			USB_send((uint8_t *) okAns, strlen(okAns));
-			return false;
+			return 0;
 		} else if (strncmp(buffStr, "M1", 2) == 0) {
 			USB_send((uint8_t *) okAns, strlen(okAns));
-			return false;
-
+			return 1;
 		} else if (strncmp(buffStr, "G1", 2) == 0) {
 			USB_send((uint8_t *) okAns, strlen(okAns));
 			parseCoords(buffStr);
-			return true;
+			return 2;
 		} else {
 			USB_send((uint8_t *) okAns, strlen(okAns));
-			return false;
+			return 3;
 		}
 	}
 }

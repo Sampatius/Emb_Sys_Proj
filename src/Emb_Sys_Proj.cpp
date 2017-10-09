@@ -138,18 +138,24 @@ void vConfigureTimerForRunTimeStats(void) {
 }
 
 void SCTLARGE0_Init(void) {
-	LPC_SCTLARGE0->CONFIG |= (1 << 17); // two 16-bit timers, auto limit
-	LPC_SCTLARGE0->CTRL_L |= (12-1) << 5; // set prescaler, SCTimer/PWM clock = 6 MHz
+	Chip_SCT_Init(LPC_SCTLARGE0);
 
-	LPC_SCTLARGE0->MATCHREL[0].L = 120000-1; // match 0 @ 120000/6MHz = 10 usec (100 kHz PWM freq)
-	LPC_SCTLARGE0->MATCHREL[1].L = 9000; // match 1 used for duty cycle (in 10 steps)
+	LPC_SCTLARGE0->CONFIG |= (1 << 17); // two 16-bit timers, auto limit at match 0
+	LPC_SCTLARGE0->CTRL_L |= (72 - 1) << 5; // BIDIR mode, prescaler = 72, SCTimer/PWM clock = 1 MHz
+
+	LPC_SCTLARGE0->MATCHREL[0].L = 20000 - 1; // match 0 @ 10/2MHz = 5 usec (100 kHz PWM freq)
+	LPC_SCTLARGE0->MATCHREL[1].L = 1500; // match 1 used for duty cycle (in 10 steps)
+
 	LPC_SCTLARGE0->EVENT[0].STATE = 0xFFFFFFFF; // event 0 happens in all states
 	LPC_SCTLARGE0->EVENT[0].CTRL = (1 << 12); // match 0 condition only
+
 	LPC_SCTLARGE0->EVENT[1].STATE = 0xFFFFFFFF; // event 1 happens in all states
 	LPC_SCTLARGE0->EVENT[1].CTRL = (1 << 0) | (1 << 12); // match 1 condition only
+
 	LPC_SCTLARGE0->OUT[0].SET = (1 << 0); // event 0 will set SCTx_OUT0
 	LPC_SCTLARGE0->OUT[0].CLR = (1 << 1); // event 1 will clear SCTx_OUT0
-	LPC_SCTLARGE0->CTRL_L &= ~(1 << 2);
+
+	LPC_SCTLARGE0->CTRL_L &= ~(1 << 2); // unhalt it by clearing bit 2 of CTRL reg
 }
 } // End of extern "C"
 
@@ -169,8 +175,17 @@ static void vParserTask(void *pvParameters) {
 	//Wait for USB serial to initialize
 	vTaskDelay(10);
 	char buffer[64];
+	bool penState = true;
+
 	while (1) {
-		if (parser->read()) {
+		if (parser->read() == 1) {
+			if (penState) {
+				penState = !penState;
+				LPC_SCTLARGE0->MATCHREL[1].L = 1000;
+			} else {
+				LPC_SCTLARGE0->MATCHREL[1].L = 1500;
+			}
+		} else if (parser->read() == 2) {
 			double xCoord = parser->getXCoord();
 			double yCoord = parser->getYCoord();
 			coordObject o(xCoord, yCoord);
@@ -202,8 +217,7 @@ static void vStepperTask(void *pvParameters) {
 
 		if (x0 > y0) {
 			xDominating = true;
-		}
-		else {
+		} else {
 			xDominating = false;
 		}
 
@@ -212,38 +226,33 @@ static void vStepperTask(void *pvParameters) {
 
 		if (deltaX < 0) {
 			xMotor->setDirection(false);
-		}
-		else {
+		} else {
 			xMotor->setDirection(true);
 		}
 
 		if (deltaY < 0) {
 			yMotor->setDirection(true);
-		}
-		else {
+		} else {
 			yMotor->setDirection(false);
 		}
 
 		if (xDominating) {
 			while (abs(deltaX) > 0) {
 				if (deltaX % deltaY == 0) {
-					RIT_start(0, 2, 100000/2000);
+					RIT_start(0, 2, 100000 / 2000);
 					deltaX--;
-				}
-				else {
-					RIT_start(2, 0, 1000000/2000);
+				} else {
+					RIT_start(2, 0, 1000000 / 2000);
 					deltaX--;
 				}
 			}
-		}
-		else {
+		} else {
 			while (abs(deltaY) > 0) {
 				if (deltaY % deltaX == 0) {
-					RIT_start(2, 0, 1000000/2000);
+					RIT_start(2, 0, 1000000 / 2000);
 					deltaY--;
-				}
-				else {
-					RIT_start(0, 2, 1000000/2000);
+				} else {
+					RIT_start(0, 2, 1000000 / 2000);
 					deltaY--;
 				}
 			}
@@ -268,19 +277,10 @@ int main(void) {
 	DigitalIoPin xLimitStart(0, 27, DigitalIoPin::pullup, true);
 	DigitalIoPin xLimitEnd(0, 28, DigitalIoPin::pullup, true);
 
-#if 1
 	DigitalIoPin yStep(0, 9, DigitalIoPin::output, true);
 	DigitalIoPin yDir(0, 29, DigitalIoPin::output, true);
 	DigitalIoPin yLimitStart(1, 9, DigitalIoPin::pullup, true);
 	DigitalIoPin yLimitEnd(1, 10, DigitalIoPin::pullup, true);
-#endif
-
-#if 0
-	DigitalIoPin yStep(1, 8, DigitalIoPin::output, true);
-	DigitalIoPin yDir(0, 5, DigitalIoPin::output, true);
-	DigitalIoPin yLimitStart(0, 6, DigitalIoPin::pullup, true);
-	DigitalIoPin yLimitEnd(0, 7, DigitalIoPin::pullup, true);
-#endif
 
 	xMotor = new Motor(xDir, xStep, xLimitStart, xLimitEnd);
 	yMotor = new Motor(yDir, yStep, yLimitStart, yLimitEnd);
@@ -290,24 +290,24 @@ int main(void) {
 	Chip_RIT_Init(LPC_RITIMER);
 
 	Chip_SWM_MovablePortPinAssign(SWM_SCT0_OUT0_O, 0, 10);
-	Chip_SCT_Init(LPC_SCTLARGE0);
 	SCTLARGE0_Init();
-
 
 	NVIC_SetPriority(RITIMER_IRQn,
 	configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
+#if 0
 	xTaskCreate(vCalibrateX, "vCalibrateX", configMINIMAL_STACK_SIZE * 8, NULL,
-				(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
+			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(vCalibrateY, "vCalibrateY", configMINIMAL_STACK_SIZE * 8, NULL,
-				(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
+			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
+#endif
 
 	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 8, NULL,
-			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
+			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(vStepperTask, "vStepperTask", configMINIMAL_STACK_SIZE * 5,
-			NULL, (tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
+			NULL, (tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(cdc_task, "CDC", configMINIMAL_STACK_SIZE * 5, NULL,
 			(tskIDLE_PRIORITY + 1UL), (TaskHandle_t *) NULL);
