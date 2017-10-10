@@ -43,6 +43,9 @@ double deltaError = 0.0;
 double error = 0.0;
 bool xDominating;
 bool xDir, yDir;
+bool stepTurn = true;
+
+int xStepsTaken, yStepsTaken;
 
 enum command {
 	M10 = 1, M1, G1, G28
@@ -79,7 +82,8 @@ void RIT_IRQHandler(void) {
 		if (xMotor->getLimitStart().read() || xMotor->getLimitEnd().read()) {
 			xSteps = 0;
 		} else {
-			xMotor->driveISR();
+			stepTurn = !stepTurn;
+			xMotor->driveISR(stepTurn);
 		}
 	}
 
@@ -89,7 +93,8 @@ void RIT_IRQHandler(void) {
 		if (yMotor->getLimitStart().read() || yMotor->getLimitEnd().read()) {
 			ySteps = 0;
 		} else {
-			yMotor->driveISR();
+			stepTurn = !stepTurn;
+			yMotor->driveISR(stepTurn);
 		}
 	}
 	//when both steps have been driven stop
@@ -166,8 +171,8 @@ void triggerMotors(GObject object) {
 	x1 = object.xCoord;
 	y1 = object.yCoord;
 
-	dx = abs(x1 - x0) * xMotor->getSteps() / 280;
-	dy = abs(y1 - y0) * yMotor->getSteps() / 280;
+	dx = abs(x1 - x0) * (double) xMotor->getSteps() / (double) 340;
+	dy = abs(y1 - y0) * (double) yMotor->getSteps() / (double) 310;
 
 	xDir = (x0 < x1) ? true : false;
 	yDir = (y0 < y1) ? true : false;
@@ -199,13 +204,16 @@ void triggerMotors(GObject object) {
 			y0 -= abs(y1 - y0);
 		}
 	}
-
+	ITM_write("--- Error values ---\n");
 	if (xDominating) {
 		while (dx > 0) {
-			RIT_start(1, 0, 1000000 / 2000);
+			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
+					deltaError);
+			ITM_write(buffer);
+			RIT_start(2, 0, 1000000 / 8000);
 			error += deltaError;
 			if (error > 0.5) {
-				RIT_start(0, 1, 100000 / 2000);
+				RIT_start(0, 2, 1000000 / 48000);
 				error -= 1.0;
 			}
 			dx--;
@@ -213,27 +221,63 @@ void triggerMotors(GObject object) {
 		}
 	} else {
 		while (dy > 0) {
-			RIT_start(0, 1, 1000000 / 2000);
+			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
+					deltaError);
+			ITM_write(buffer);
+			RIT_start(0, 2, 1000000 / 8000);
 			error += deltaError;
 			if (error > 0.5) {
-				RIT_start(1, 0, 1000000 / 2000);
+				RIT_start(2, 0, 1000000 / 8000);
 				error -= 1.0;
 			}
 			dy--;
 			vTaskDelay(10);
 		}
 	}
+	error = 0;
 }
 
 /* TASKS */
 
 static void vCalibrateX(void *pvParameters) {
-	xMotor->calibrate();
+	bool calibrated = false;
+	while (!calibrated) {
+		if (xMotor->getLimitStart().read()) {
+			xMotor->setDirection(false);
+			xStepsTaken = 0;
+		} else if (xMotor->getLimitEnd().read()) {
+			for (int i = 0; i < (xStepsTaken * 0.02); i++) {
+				xMotor->setDirection(false);
+				RIT_start(2, 0, 1000000 / 8000);
+			}
+			xStepsTaken = xStepsTaken * 0.98;
+			calibrated = true;
+		}
+		xStepsTaken++;
+		xMotor->setDirection(true);
+		RIT_start(2, 0, 1000000 / 8000);
+	}
 	vTaskDelete(NULL);
 }
 
 static void vCalibrateY(void *pvParameters) {
-	yMotor->calibrate();
+	bool calibrated = false;
+	while (!calibrated) {
+		if (yMotor->getLimitStart().read()) {
+			yMotor->setDirection(false);
+			yStepsTaken = 0;
+		} else if (yMotor->getLimitEnd().read()) {
+			for (int i = 0; i < (yStepsTaken * 0.02); i++) {
+				yMotor->setDirection(false);
+				RIT_start(2, 0, 1000000 / 8000);
+			}
+			yStepsTaken = yStepsTaken * 0.98;
+			calibrated = true;
+		}
+		yStepsTaken++;
+		yMotor->setDirection(true);
+		RIT_start(2, 0, 1000000 / 8000);
+	}
 	vTaskDelete(NULL);
 }
 
@@ -254,7 +298,7 @@ static void vParserTask(void *pvParameters) {
 			ITM_write("\n");
 			for (uint32_t i = 0; i < len; ++i) {
 				if (strFromUSB[i] == '\n') {
-					buffStr[strlen(strFromUSB)] = 0;
+					buffStr[i] = 0;
 					loopRead = false;
 					break;
 				} else {
@@ -272,6 +316,7 @@ static void vParserTask(void *pvParameters) {
 			break;
 		case M1:
 			gObject.command = M1;
+			gObject.servo = parser->getAngle();
 			xQueueSendToBack(commandQueue, &gObject, portMAX_DELAY);
 			break;
 		case G1:
@@ -301,11 +346,13 @@ static void vStepperTask(void *pvParameters) {
 			switch (gObject.command) {
 			case M10:
 				USB_send(
-						(uint8_t *) "M10 XY 280 280 0.00 0.00 A0 B0 H0 S80 U160 D90\n",
+						(uint8_t *) "M10 XY 340 310 0.00 0.00 A0 B0 H0 S80 U160 D90\n",
 						48);
 				USB_send((uint8_t *) "OK\n", 4);
 				break;
 			case M1:
+				sprintf(buffer, "gObjectAngle: %d\n", gObject.servo);
+				ITM_write(buffer);
 				USB_send((uint8_t *) "OK\n", 4);
 				break;
 			case G1:
@@ -319,7 +366,7 @@ static void vStepperTask(void *pvParameters) {
 				USB_send((uint8_t *) "OK\n", 4);
 				break;
 			}
-			vTaskDelay(10);
+			vTaskDelay(1);
 		}
 	}
 }
@@ -335,6 +382,7 @@ int main(void) {
 
 	parser = new GCodeParser();
 
+#if 0
 //xMotor DigitalIoPins
 
 	DigitalIoPin xStep(0, 24, DigitalIoPin::output, true);
@@ -348,6 +396,19 @@ int main(void) {
 	DigitalIoPin yDir(0, 29, DigitalIoPin::output, true);
 	DigitalIoPin yLimitStart(1, 9, DigitalIoPin::pullup, true);
 	DigitalIoPin yLimitEnd(1, 10, DigitalIoPin::pullup, true);
+#endif
+
+//Plotter X DigitalIoPins
+	DigitalIoPin xStep(0, 27, DigitalIoPin::output, true);
+	DigitalIoPin xDir(0, 28, DigitalIoPin::output, true);
+	DigitalIoPin xLimitStart(0, 0, DigitalIoPin::pullup, true);
+	DigitalIoPin xLimitEnd(1, 3, DigitalIoPin::pullup, true);
+
+//Plotter Y DigitalIoPins
+	DigitalIoPin yStep(0, 24, DigitalIoPin::output, true);
+	DigitalIoPin yDir(1, 0, DigitalIoPin::output, true);
+	DigitalIoPin yLimitStart(0, 9, DigitalIoPin::pullup, true);
+	DigitalIoPin yLimitEnd(0, 29, DigitalIoPin::pullup, true);
 
 //X and Y Motors
 

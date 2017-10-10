@@ -30,9 +30,8 @@ void Motor::drive(bool direction) {
 	vTaskDelay(1);
 }
 
-void Motor::driveISR() {
-	step.write(true);
-	step.write(false);
+void Motor::driveISR(bool turn) {
+	step.write(turn);
 }
 
 void Motor::calibrate() {

@@ -29,7 +29,7 @@ public:
 
 	//Class functions
 	void drive(bool direction);
-	void driveISR();
+	void driveISR(bool turn);
 	void calibrate();
 
 private:

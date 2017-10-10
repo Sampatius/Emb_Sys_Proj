@@ -25,13 +25,16 @@ public:
 
 	inline double getXCoord() { return xCoord_; }
 	inline double getYCoord() { return yCoord_; }
+	inline int getAngle() { return angle_; }
 
 private:
 
 	void parseCoords(char* buffer);
+	void parseAngle(char* buffer);
 
 	double xCoord_;
 	double yCoord_;
+	int angle_;
 };
 
 #endif /* GCODEPARSER_H_ */

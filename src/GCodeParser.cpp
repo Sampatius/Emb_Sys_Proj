@@ -20,6 +20,7 @@ int GCodeParser::read(char* inputStr) {
 	if (strncmp(inputStr, "M10", 3) == 0) {
 		return 1;
 	} else if (strncmp(inputStr, "M1", 2) == 0) {
+		parseAngle(inputStr);
 		return 2;
 	} else if (strncmp(inputStr, "G1", 2) == 0) {
 		parseCoords(inputStr);
@@ -27,6 +28,13 @@ int GCodeParser::read(char* inputStr) {
 	} else {
 		return 0;
 	}
+}
+
+void GCodeParser::parseAngle(char* buffer) {
+	char temp[5];
+	int angle;
+	sscanf(buffer, "%s%d", temp, &angle);
+	angle_ = angle;
 }
 
 void GCodeParser::parseCoords(char* buffer) {
@@ -40,7 +48,7 @@ void GCodeParser::parseCoords(char* buffer) {
 				temp[tempIndex] = buffer[j];
 				tempIndex++;
 			}
-			temp[strlen(temp)+1] = 0;
+			temp[strlen(temp)] = 0;
 			xCoord = atof(temp);
 			xCoord_ = xCoord;
 		}
@@ -50,7 +58,7 @@ void GCodeParser::parseCoords(char* buffer) {
 				temp[tempIndex] = buffer[k];
 				tempIndex++;
 			}
-			temp[strlen(temp)+1] = 0;
+			temp[strlen(temp)] = 0;
 			yCoord = atof(temp);
 			yCoord_ = yCoord;
 		}
