@@ -38,22 +38,26 @@ Motor *yMotor;
 
 QueueHandle_t commandQueue;
 
-struct coordObject {
-	double xCoord = 0, yCoord = 0, oldX = 0, oldY = 0;
-	coordObject();
-	coordObject(double xCoord_, double yCoord_);
+int x0 = 0, x1, y0 = 0, y1, dx, dy;
+double deltaError = 0.0;
+double error = 0.0;
+bool xDominating;
+bool xDir, yDir;
+
+enum command {
+	M10 = 1, M1, G1, G28
 };
 
-coordObject::coordObject() {
+struct GObject {
+	int command = 0;
 
-}
+	int servo = 0;
 
-coordObject::coordObject(double xCoord_, double yCoord_) {
-	xCoord = xCoord_;
-	yCoord = yCoord_;
-	oldX = xCoord;
-	oldY = yCoord;
-}
+	int xCoord = 0;
+	int yCoord = 0;
+};
+
+GObject gObject;
 
 static void prvSetupHardware(void) {
 	SystemCoreClockUpdate();
@@ -72,24 +76,21 @@ void RIT_IRQHandler(void) {
 	//Drive xMotor
 	if (xSteps > 0) {
 		xSteps--;
-		xMotor->driveISR();
-
-		//Stop if limit read
 		if (xMotor->getLimitStart().read() || xMotor->getLimitEnd().read()) {
 			xSteps = 0;
+		} else {
+			xMotor->driveISR();
 		}
 	}
 
 	//Drive yMotor
 	if (ySteps > 0) {
 		ySteps--;
-		yMotor->driveISR();
-
-		//Stop if limit read
 		if (yMotor->getLimitStart().read() || yMotor->getLimitEnd().read()) {
 			ySteps = 0;
+		} else {
+			yMotor->driveISR();
 		}
-
 	}
 	//when both steps have been driven stop
 	else if (xSteps <= 0) {
@@ -159,6 +160,71 @@ void SCTLARGE0_Init(void) {
 }
 } // End of extern "C"
 
+void triggerMotors(GObject object) {
+
+	char buffer[96];
+	x1 = object.xCoord;
+	y1 = object.yCoord;
+
+	dx = abs(x1 - x0) * xMotor->getSteps() / 280;
+	dy = abs(y1 - y0) * yMotor->getSteps() / 280;
+
+	xDir = (x0 < x1) ? true : false;
+	yDir = (y0 < y1) ? true : false;
+
+	xMotor->setDirection(xDir);
+	yMotor->setDirection(yDir);
+
+	xDominating = (x1 > y1) ? true : false;
+
+	sprintf(buffer,
+			"x0: %d, y0: %d, x1: %d, y1: %d, dx: %d, dy: %d, deltaError: %6.2lf\n",
+			x0, y0, x1, y1, dx, dy, deltaError);
+	ITM_write(buffer);
+
+	if (dx == 0) {
+		deltaError = 0.0f;
+		x0 = x0;
+		y0 = y0;
+	} else {
+		deltaError = (double) ((double) dy / (double) dx);
+		if (xDir) {
+			x0 += abs(x1 - x0);
+		} else {
+			x0 -= abs(x1 - x0);
+		}
+		if (yDir) {
+			y0 += abs(y1 - y0);
+		} else {
+			y0 -= abs(y1 - y0);
+		}
+	}
+
+	if (xDominating) {
+		while (dx > 0) {
+			RIT_start(1, 0, 1000000 / 2000);
+			error += deltaError;
+			if (error > 0.5) {
+				RIT_start(0, 1, 100000 / 2000);
+				error -= 1.0;
+			}
+			dx--;
+			vTaskDelay(10);
+		}
+	} else {
+		while (dy > 0) {
+			RIT_start(0, 1, 1000000 / 2000);
+			error += deltaError;
+			if (error > 0.5) {
+				RIT_start(1, 0, 1000000 / 2000);
+				error -= 1.0;
+			}
+			dy--;
+			vTaskDelay(10);
+		}
+	}
+}
+
 /* TASKS */
 
 static void vCalibrateX(void *pvParameters) {
@@ -174,132 +240,88 @@ static void vCalibrateY(void *pvParameters) {
 static void vParserTask(void *pvParameters) {
 	//Wait for USB serial to initialize
 	vTaskDelay(10);
-	char buffer[64];
-	bool penState = true;
+
+	char strFromUSB[96];
+	char buffStr[96];
+	bool loopRead = true;
+	uint32_t len;
 
 	while (1) {
-		if (parser->read() == 1) {
-			if (penState) {
-				penState = !penState;
-				LPC_SCTLARGE0->MATCHREL[1].L = 1000;
-			} else {
-				LPC_SCTLARGE0->MATCHREL[1].L = 1500;
+		do {
+			len = USB_receive((uint8_t *) strFromUSB, 96);
+			strFromUSB[len] = 0;
+			ITM_write(strFromUSB);
+			ITM_write("\n");
+			for (uint32_t i = 0; i < len; ++i) {
+				if (strFromUSB[i] == '\n') {
+					buffStr[strlen(strFromUSB)] = 0;
+					loopRead = false;
+					break;
+				} else {
+					buffStr[i] = strFromUSB[i];
+				}
 			}
-		} else if (parser->read() == 2) {
-			double xCoord = parser->getXCoord();
-			double yCoord = parser->getYCoord();
-			coordObject o(xCoord, yCoord);
-			xQueueSendToBack(commandQueue, &o, portMAX_DELAY);
-			sprintf(buffer, "vP X: %0.2f Y: %0.2f\n", xCoord, yCoord);
-			ITM_write(buffer);
-		} else {
-			ITM_write("No coords.\n");
+		} while (loopRead);
+
+		loopRead = true;
+
+		switch (parser->read(buffStr)) {
+		case M10:
+			gObject.command = M10;
+			xQueueSendToBack(commandQueue, &gObject, portMAX_DELAY);
+			break;
+		case M1:
+			gObject.command = M1;
+			xQueueSendToBack(commandQueue, &gObject, portMAX_DELAY);
+			break;
+		case G1:
+			gObject.command = G1;
+			gObject.xCoord = parser->getXCoord();
+			gObject.yCoord = parser->getYCoord();
+			xQueueSendToBack(commandQueue, &gObject, portMAX_DELAY);
+			break;
+		case G28:
+			gObject.command = G28;
+			xQueueSendToBack(commandQueue, &gObject, portMAX_DELAY);
+			break;
+		default:
+			break;
 		}
 	}
 }
 
 static void vStepperTask(void *pvParameters) {
-	coordObject o;
-	char buffer[64];
-
-	int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-	int deltaX, deltaY;
-
-	bool xDominating;
-
-	while (1) {
-		xQueueReceive(commandQueue, &o, portMAX_DELAY);
-		sprintf(buffer, "vS X: %02f Y: %0.2f", o.xCoord, o.yCoord);
-		ITM_write(buffer);
-
-		x0 = o.xCoord;
-		y0 = o.yCoord;
-
-		if (x0 > y0) {
-			xDominating = true;
-		} else {
-			xDominating = false;
-		}
-
-		deltaX = x1 - x0;
-		deltaY = y1 - y0;
-
-		if (deltaX < 0) {
-			xMotor->setDirection(false);
-		} else {
-			xMotor->setDirection(true);
-		}
-
-		if (deltaY < 0) {
-			yMotor->setDirection(true);
-		} else {
-			yMotor->setDirection(false);
-		}
-
-		if (xDominating) {
-			while (abs(deltaX) > 0) {
-				if (deltaX % deltaY == 0) {
-					RIT_start(0, 2, 100000 / 2000);
-					deltaX--;
-				} else {
-					RIT_start(2, 0, 1000000 / 2000);
-					deltaX--;
-				}
-			}
-		} else {
-			while (abs(deltaY) > 0) {
-				if (deltaY % deltaX == 0) {
-					RIT_start(2, 0, 1000000 / 2000);
-					deltaY--;
-				} else {
-					RIT_start(0, 2, 1000000 / 2000);
-					deltaY--;
-				}
-			}
-		}
-
-		/*
-		 x2 = o.xCoord;
-		y2 = o.yCoord;
-
-		int dx=x2-x1;
-		int dy=y2-y1;
-		int x=x1;
-		int y=y1;
-
-		if (dx < 0) {
-			xMotor->setDirection(false);
-		}
-		else {
-			xMotor->setDirection(true);
-		}
-
-		if (dy < 0) {
-			yMotor->setDirection(true);
-		}
-		else {
-			yMotor->setDirection(false);
-		}
-
-
-		int e=(2*dy)-dx;
-		for (int i=0;i<=dx;i++)
-		{
-			RIT_start(x, y, 1000000 / 2000);
-			while(e>=0)
-			{
-				y=y+1;
-				e=e-(2*dx);
-			}
-			x=x+1;
-			e=e+(2*dy);
-		}
-
-		x1 = x;
-		y1 = y;
-		 */
-	}
 	vTaskDelay(10);
+	char buffer[96];
+	while (1) {
+		if (xQueueReceive(commandQueue, &gObject,
+				configTICK_RATE_HZ * 10) == pdFALSE) {
+			USB_send((uint8_t *) "OK\n", 4);
+		} else {
+			switch (gObject.command) {
+			case M10:
+				USB_send(
+						(uint8_t *) "M10 XY 280 280 0.00 0.00 A0 B0 H0 S80 U160 D90\n",
+						48);
+				USB_send((uint8_t *) "OK\n", 4);
+				break;
+			case M1:
+				USB_send((uint8_t *) "OK\n", 4);
+				break;
+			case G1:
+				sprintf(buffer, "gObjectX: %d, gObjectY: %d\n", gObject.xCoord,
+						gObject.yCoord);
+				ITM_write(buffer);
+				triggerMotors(gObject);
+				USB_send((uint8_t *) "OK\n", 4);
+				break;
+			case G28:
+				USB_send((uint8_t *) "OK\n", 4);
+				break;
+			}
+			vTaskDelay(10);
+		}
+	}
 }
 
 /* END OF TASKS */
@@ -313,20 +335,28 @@ int main(void) {
 
 	parser = new GCodeParser();
 
+//xMotor DigitalIoPins
+
 	DigitalIoPin xStep(0, 24, DigitalIoPin::output, true);
 	DigitalIoPin xDir(1, 0, DigitalIoPin::output, true);
 	DigitalIoPin xLimitStart(0, 27, DigitalIoPin::pullup, true);
 	DigitalIoPin xLimitEnd(0, 28, DigitalIoPin::pullup, true);
+
+//yMotor DigitalIoPins
 
 	DigitalIoPin yStep(0, 9, DigitalIoPin::output, true);
 	DigitalIoPin yDir(0, 29, DigitalIoPin::output, true);
 	DigitalIoPin yLimitStart(1, 9, DigitalIoPin::pullup, true);
 	DigitalIoPin yLimitEnd(1, 10, DigitalIoPin::pullup, true);
 
+//X and Y Motors
+
 	xMotor = new Motor(xDir, xStep, xLimitStart, xLimitEnd);
 	yMotor = new Motor(yDir, yStep, yLimitStart, yLimitEnd);
 
-	commandQueue = xQueueCreate(10, sizeof(coordObject));
+//Queue for commands
+
+	commandQueue = xQueueCreate(1, sizeof(GObject));
 
 	Chip_RIT_Init(LPC_RITIMER);
 
@@ -336,12 +366,12 @@ int main(void) {
 	NVIC_SetPriority(RITIMER_IRQn,
 	configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
-#if 0
+#if 1
 	xTaskCreate(vCalibrateX, "vCalibrateX", configMINIMAL_STACK_SIZE * 8, NULL,
-			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
+			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(vCalibrateY, "vCalibrateY", configMINIMAL_STACK_SIZE * 8, NULL,
-			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
+			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
 #endif
 
 	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 8, NULL,

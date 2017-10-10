@@ -10,7 +10,7 @@
 Motor::Motor(DigitalIoPin dir_, DigitalIoPin step_, DigitalIoPin limitStart_,
 		DigitalIoPin limitEnd_) :
 		dir(dir_), step(step_), limitStart(limitStart_), limitEnd(limitEnd_), steps(
-				0) {
+				1500) {
 
 }
 
@@ -45,12 +45,9 @@ void Motor::calibrate() {
 			for (int i = 0; i < (steps * 0.02); i++) {
 				drive(direction);
 				vTaskDelay(5);
-				while (limitEnd.read()) {
-					drive(direction);
-				}
-				steps = steps * 0.97;
-				calibrated = true;
 			}
+			steps = steps * 0.98;
+			calibrated = true;
 		}
 		steps++;
 		drive(direction);

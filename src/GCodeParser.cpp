@@ -16,32 +16,16 @@ GCodeParser::~GCodeParser() {
 	// TODO Auto-generated destructor stub
 }
 
-int GCodeParser::read() {
-	char str[96];
-	char buffStr[96];
-	uint32_t len = 0;
-
-	len = USB_receive((uint8_t *) str, 96);
-	if (len > 0) {
-		for (uint32_t i = 0; i < len; ++i) {
-			buffStr[i] = str[i];
-		}
-		buffStr[len] = 0;
-		if (strncmp(buffStr, "M10", 3) == 0) {
-			USB_send((uint8_t *) M10Ans, strlen(M10Ans));
-			USB_send((uint8_t *) okAns, strlen(okAns));
-			return 0;
-		} else if (strncmp(buffStr, "M1", 2) == 0) {
-			USB_send((uint8_t *) okAns, strlen(okAns));
-			return 1;
-		} else if (strncmp(buffStr, "G1", 2) == 0) {
-			USB_send((uint8_t *) okAns, strlen(okAns));
-			parseCoords(buffStr);
-			return 2;
-		} else {
-			USB_send((uint8_t *) okAns, strlen(okAns));
-			return 3;
-		}
+int GCodeParser::read(char* inputStr) {
+	if (strncmp(inputStr, "M10", 3) == 0) {
+		return 1;
+	} else if (strncmp(inputStr, "M1", 2) == 0) {
+		return 2;
+	} else if (strncmp(inputStr, "G1", 2) == 0) {
+		parseCoords(inputStr);
+		return 3;
+	} else {
+		return 0;
 	}
 }
 
@@ -56,6 +40,7 @@ void GCodeParser::parseCoords(char* buffer) {
 				temp[tempIndex] = buffer[j];
 				tempIndex++;
 			}
+			temp[strlen(temp)+1] = 0;
 			xCoord = atof(temp);
 			xCoord_ = xCoord;
 		}
@@ -65,6 +50,7 @@ void GCodeParser::parseCoords(char* buffer) {
 				temp[tempIndex] = buffer[k];
 				tempIndex++;
 			}
+			temp[strlen(temp)+1] = 0;
 			yCoord = atof(temp);
 			yCoord_ = yCoord;
 		}
