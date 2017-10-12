@@ -281,12 +281,29 @@ static void vCalibrateX(void *pvParameters) {
 		} else if (xMotor->getLimitEnd().read()) {
 			for (int i = 0; i < (xStepsTaken * 0.02); i++) {
 				xMotor->setDirection(true);
-				RIT_start(2, 0, 1000000 / 8000);
+				RIT_start(2, 0, 1000000 / 10000);
 			}
 			xStepsTaken = xStepsTaken * 0.98;
 			xCalibrated = true;
 		}
 	}
+	yMotor->setDirection(true);
+	while (!yCalibrated) {
+		yStepsTaken++;
+		RIT_start(0, 2, 1000000 / 10000);
+		if (yMotor->getLimitStart().read()) {
+			yMotor->setDirection(false);
+			yStepsTaken = 0;
+		} else if (yMotor->getLimitEnd().read()) {
+			for (int i = 0; i < (yStepsTaken * 0.02); i++) {
+				yMotor->setDirection(true);
+				RIT_start(0, 2, 1000000 / 8000);
+			}
+			yStepsTaken = yStepsTaken * 0.98;
+			yCalibrated = true;
+		}
+	}
+
 	vTaskDelete(NULL);
 }
 
@@ -294,7 +311,7 @@ static void vCalibrateY(void *pvParameters) {
 	yMotor->setDirection(true);
 	while (!yCalibrated) {
 		yStepsTaken++;
-		RIT_start(0, 2, 1000000 / 8000);
+		RIT_start(0, 2, 1000000 / 10000);
 		if (yMotor->getLimitStart().read()) {
 			yMotor->setDirection(false);
 			yStepsTaken = 0;
@@ -417,14 +434,14 @@ int main(void) {
 	parser = new GCodeParser();
 
 #if 0
-//xMotor DigitalIoPins
+	//xMotor DigitalIoPins
 
 	DigitalIoPin xStep(0, 24, DigitalIoPin::output, true);
 	DigitalIoPin xDir(1, 0, DigitalIoPin::output, true);
 	DigitalIoPin xLimitStart(0, 27, DigitalIoPin::pullup, true);
 	DigitalIoPin xLimitEnd(0, 28, DigitalIoPin::pullup, true);
 
-//yMotor DigitalIoPins
+	//yMotor DigitalIoPins
 
 	DigitalIoPin yStep(0, 9, DigitalIoPin::output, true);
 	DigitalIoPin yDir(0, 29, DigitalIoPin::output, true);
@@ -432,24 +449,24 @@ int main(void) {
 	DigitalIoPin yLimitEnd(1, 10, DigitalIoPin::pullup, true);
 #endif
 
-//Plotter X DigitalIoPins
+	//Plotter X DigitalIoPins
 	DigitalIoPin xStep(0, 27, DigitalIoPin::output, true);
 	DigitalIoPin xDir(0, 28, DigitalIoPin::output, true);
 	DigitalIoPin xLimitStart(0, 0, DigitalIoPin::pullup, true);
 	DigitalIoPin xLimitEnd(1, 3, DigitalIoPin::pullup, true);
 
-//Plotter Y DigitalIoPins
+	//Plotter Y DigitalIoPins
 	DigitalIoPin yStep(0, 24, DigitalIoPin::output, true);
 	DigitalIoPin yDir(1, 0, DigitalIoPin::output, true);
 	DigitalIoPin yLimitStart(0, 9, DigitalIoPin::pullup, true);
 	DigitalIoPin yLimitEnd(0, 29, DigitalIoPin::pullup, true);
 
-//X and Y Motors
+	//X and Y Motors
 
 	xMotor = new Motor(xDir, xStep, xLimitStart, xLimitEnd);
 	yMotor = new Motor(yDir, yStep, yLimitStart, yLimitEnd);
 
-//Queue for commands
+	//Queue for commands
 
 	commandQueue = xQueueCreate(1, sizeof(GObject));
 
@@ -459,13 +476,13 @@ int main(void) {
 	SCTLARGE0_Init();
 
 	NVIC_SetPriority(RITIMER_IRQn,
-	configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+			configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
 #if 1
 	xTaskCreate(vCalibrateX, "vCalibrateX", configMINIMAL_STACK_SIZE * 8, NULL,
 			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
 #endif
-#if 1
+#if 0
 	xTaskCreate(vCalibrateY, "vCalibrateY", configMINIMAL_STACK_SIZE * 8, NULL,
 			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
 #endif
