@@ -44,6 +44,8 @@ double error = 0.0;
 bool xDominating;
 bool xDir, yDir;
 bool stepTurn = true;
+bool xCalibrated = false;
+bool yCalibrated = false;
 
 int xStepsTaken, yStepsTaken;
 
@@ -76,29 +78,49 @@ void RIT_IRQHandler(void) {
 	// Timer then removes the IRQ until next match occurs
 	Chip_RIT_ClearIntStatus(LPC_RITIMER);	// clear IRQ flag
 
-	//Drive xMotor
-	if (xSteps > 0) {
-		xSteps--;
-		if (xMotor->getLimitStart().read() || xMotor->getLimitEnd().read()) {
-			xSteps = 0;
-		} else {
+	if (!xCalibrated) {
+		if (xSteps > 0) {
+			xSteps--;
 			stepTurn = !stepTurn;
 			xMotor->driveISR(stepTurn);
 		}
 	}
-
-	//Drive yMotor
-	if (ySteps > 0) {
-		ySteps--;
-		if (yMotor->getLimitStart().read() || yMotor->getLimitEnd().read()) {
-			ySteps = 0;
-		} else {
+	if (!yCalibrated) {
+		if (ySteps > 0) {
+			ySteps--;
 			stepTurn = !stepTurn;
 			yMotor->driveISR(stepTurn);
 		}
 	}
+
+	else if (xCalibrated && yCalibrated) {
+
+		//Drive xMotor
+		if (xSteps > 0) {
+			xSteps--;
+			if (xMotor->getLimitStart().read()
+					|| xMotor->getLimitEnd().read()) {
+				xSteps = 0;
+			} else {
+				stepTurn = !stepTurn;
+				xMotor->driveISR(stepTurn);
+			}
+		}
+
+		//Drive yMotor
+		if (ySteps > 0) {
+			ySteps--;
+			if (yMotor->getLimitStart().read()
+					|| yMotor->getLimitEnd().read()) {
+				ySteps = 0;
+			} else {
+				stepTurn = !stepTurn;
+				yMotor->driveISR(stepTurn);
+			}
+		}
+	}
 	//when both steps have been driven stop
-	else if (xSteps <= 0) {
+	if (xSteps <= 0 && ySteps <= 0) {
 		Chip_RIT_Disable(LPC_RITIMER); // disable timer
 		// Give semaphore and set context switch flag if a higher priority task was woken up
 		xSemaphoreGiveFromISR(sbRIT, &xHigherPriorityWoken);
@@ -187,25 +209,27 @@ void triggerMotors(GObject object) {
 			x0, y0, x1, y1, dx, dy, deltaError);
 	ITM_write(buffer);
 
-	if (dx == 0) {
-		deltaError = 0.0f;
-		x0 = x0;
-		y0 = y0;
+	if (xDir) {
+		x0 += abs(x1 - x0);
 	} else {
-		deltaError = (double) ((double) dy / (double) dx);
-		if (xDir) {
-			x0 += abs(x1 - x0);
-		} else {
-			x0 -= abs(x1 - x0);
-		}
-		if (yDir) {
-			y0 += abs(y1 - y0);
-		} else {
-			y0 -= abs(y1 - y0);
-		}
+		x0 -= abs(x1 - x0);
 	}
+	if (yDir) {
+		y0 += abs(y1 - y0);
+	} else {
+		y0 -= abs(y1 - y0);
+	}
+
 	ITM_write("--- Error values ---\n");
 	if (xDominating) {
+		if (dx == 0) {
+			deltaError = 0.0f;
+			x0 = x0;
+			y0 = y0;
+		} else {
+			deltaError = (double) ((double) dy / (double) dx);
+
+		}
 		while (dx > 0) {
 			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
 					deltaError);
@@ -220,6 +244,13 @@ void triggerMotors(GObject object) {
 			vTaskDelay(10);
 		}
 	} else {
+		if (dy == 0) {
+			deltaError = 0.0f;
+			x0 = 0;
+			y0 = 0;
+		} else {
+			deltaError = (double) ((double) dx / (double) dy);
+		}
 		while (dy > 0) {
 			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
 					deltaError);
@@ -240,43 +271,41 @@ void triggerMotors(GObject object) {
 /* TASKS */
 
 static void vCalibrateX(void *pvParameters) {
-	bool calibrated = false;
-	while (!calibrated) {
+	xMotor->setDirection(true);
+	while (!xCalibrated) {
+		xStepsTaken++;
+		RIT_start(2, 0, 1000000 / 8000);
 		if (xMotor->getLimitStart().read()) {
 			xMotor->setDirection(false);
 			xStepsTaken = 0;
 		} else if (xMotor->getLimitEnd().read()) {
 			for (int i = 0; i < (xStepsTaken * 0.02); i++) {
-				xMotor->setDirection(false);
+				xMotor->setDirection(true);
 				RIT_start(2, 0, 1000000 / 8000);
 			}
 			xStepsTaken = xStepsTaken * 0.98;
-			calibrated = true;
+			xCalibrated = true;
 		}
-		xStepsTaken++;
-		xMotor->setDirection(true);
-		RIT_start(2, 0, 1000000 / 8000);
 	}
 	vTaskDelete(NULL);
 }
 
 static void vCalibrateY(void *pvParameters) {
-	bool calibrated = false;
-	while (!calibrated) {
+	yMotor->setDirection(true);
+	while (!yCalibrated) {
+		yStepsTaken++;
+		RIT_start(0, 2, 1000000 / 8000);
 		if (yMotor->getLimitStart().read()) {
 			yMotor->setDirection(false);
 			yStepsTaken = 0;
 		} else if (yMotor->getLimitEnd().read()) {
 			for (int i = 0; i < (yStepsTaken * 0.02); i++) {
-				yMotor->setDirection(false);
-				RIT_start(2, 0, 1000000 / 8000);
+				yMotor->setDirection(true);
+				RIT_start(0, 2, 1000000 / 8000);
 			}
 			yStepsTaken = yStepsTaken * 0.98;
-			calibrated = true;
+			yCalibrated = true;
 		}
-		yStepsTaken++;
-		yMotor->setDirection(true);
-		RIT_start(2, 0, 1000000 / 8000);
 	}
 	vTaskDelete(NULL);
 }
@@ -353,6 +382,11 @@ static void vStepperTask(void *pvParameters) {
 			case M1:
 				sprintf(buffer, "gObjectAngle: %d\n", gObject.servo);
 				ITM_write(buffer);
+				if (gObject.servo == 90) {
+					LPC_SCTLARGE0->MATCHREL[1].L = 1100;
+				} else {
+					LPC_SCTLARGE0->MATCHREL[1].L = 1600;
+				}
 				USB_send((uint8_t *) "OK\n", 4);
 				break;
 			case G1:
@@ -430,7 +464,8 @@ int main(void) {
 #if 1
 	xTaskCreate(vCalibrateX, "vCalibrateX", configMINIMAL_STACK_SIZE * 8, NULL,
 			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
-
+#endif
+#if 1
 	xTaskCreate(vCalibrateY, "vCalibrateY", configMINIMAL_STACK_SIZE * 8, NULL,
 			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
 #endif

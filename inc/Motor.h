@@ -24,6 +24,7 @@ public:
 	inline DigitalIoPin getLimitStart() { return limitStart; }
 	inline DigitalIoPin getLimitEnd() { return limitEnd; }
 	inline int getSteps() { return steps; }
+	inline bool getDirection() { return direction; }
 
 	void setDirection(bool direction);
 
