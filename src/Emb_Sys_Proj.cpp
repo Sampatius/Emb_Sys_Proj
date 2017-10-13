@@ -47,7 +47,7 @@ bool stepTurn = true;
 bool xCalibrated = false;
 bool yCalibrated = false;
 
-double scaledX, scaledY;
+int scaledX, scaledY;
 int areaXmm = 340, areaYmm = 300;
 
 int xStepsTaken, yStepsTaken;
@@ -196,9 +196,11 @@ void triggerMotors(GObject object) {
 	x1 = object.xCoord;
 	y1 = object.yCoord;
 
-	dx = abs(x1 - x0) * scaledX;
-	dy = abs(y1 - y0) * scaledY;
+	dx = (x1 - x0) * scaledX;
+	dy = (y1 - y0) * scaledY;
 
+	dx = abs(dx);
+	dy = abs(dy);
 	xDir = (x0 < x1) ? true : false;
 	yDir = (y0 < y1) ? true : false;
 
@@ -207,68 +209,63 @@ void triggerMotors(GObject object) {
 
 	xDominating = (x1 > y1) ? true : false;
 
-	sprintf(buffer,
-			"x0: %d, y0: %d, x1: %d, y1: %d, dx: %d, dy: %d, deltaError: %6.2lf\n",
-			x0, y0, x1, y1, dx, dy, deltaError);
-	ITM_write(buffer);
-
-	if (xDir) {
-		x0 += abs(x1 - x0);
-	} else {
-		x0 -= abs(x1 - x0);
-	}
-	if (yDir) {
-		y0 += abs(y1 - y0);
-	} else {
-		y0 -= abs(y1 - y0);
-	}
+//	if (xDir) {
+//		x0 += (x1 - x0);
+//	} else {
+//		x0 -= (x1 - x0);
+//	}
+//	if (yDir) {
+//		y0 += (y1 - y0);
+//	} else {
+//		y0 -= (y1 - y0);
+//	}
 
 	ITM_write("--- Error values ---\n");
 	if (xDominating) {
 		if (dx == 0) {
 			deltaError = 0.0f;
-			x0 = x0;
-			y0 = y0;
 		} else {
-			deltaError = (double) ((double) dy / (double) dx);
-
+			deltaError = ((double) dy / (double) dx);
 		}
 		while (dx > 0) {
 			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
 					deltaError);
 			ITM_write(buffer);
-			RIT_start(2, 0, 1000000 / 12000);
+			RIT_start(2, 0, 1000000 / 15000);
 			error += deltaError;
 			if (error > 0.5) {
-				RIT_start(0, 2, 1000000 / 12000);
+				RIT_start(0, 2, 1000000 / 15000);
 				error -= 1.0;
 			}
 			dx--;
-			vTaskDelay(10);
 		}
 	} else {
 		if (dy == 0) {
 			deltaError = 0.0f;
-			x0 = 0;
-			y0 = 0;
 		} else {
-			deltaError = (double) ((double) dx / (double) dy);
+			deltaError = ((double) dx / (double) dy);
 		}
 		while (dy > 0) {
 			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
 					deltaError);
 			ITM_write(buffer);
-			RIT_start(0, 2, 1000000 / 12000);
+			RIT_start(0, 2, 1000000 / 15000);
 			error += deltaError;
 			if (error > 0.5) {
-				RIT_start(2, 0, 1000000 / 12000);
+				RIT_start(2, 0, 1000000 / 15000);
 				error -= 1.0;
 			}
 			dy--;
-			vTaskDelay(10);
 		}
 	}
-	error = 0;
+
+	sprintf(buffer,
+			"x0: %d, y0: %d, x1: %d, y1: %d, dx: %d, dy: %d, deltaError: %6.2lf\n",
+			x0, y0, x1, y1, dx, dy, deltaError);
+	ITM_write(buffer);
+
+	x0 += (x1 - x0);
+	y0 += (y1 - y0);
 }
 
 /* TASKS */
@@ -279,7 +276,7 @@ static void vCalibrate(void *pvParameters) {
 	xMotor->setDirection(true);
 	yMotor->setDirection(true);
 
-	while(!xCalibrated || !yCalibrated) {
+	while (!xCalibrated || !yCalibrated) {
 		if (!xCalibrated) {
 			xStepsTaken++;
 			RIT_start(2, 0, 1000000 / 15000);
@@ -292,7 +289,7 @@ static void vCalibrate(void *pvParameters) {
 					RIT_start(2, 0, 1000000 / 15000);
 				}
 				xStepsTaken = xStepsTaken * 0.98;
-				scaledX = (double)(xMotor->getSteps() / areaXmm);
+				scaledX = xStepsTaken / areaYmm;
 				xCalibrated = true;
 			}
 		}
@@ -308,7 +305,7 @@ static void vCalibrate(void *pvParameters) {
 					RIT_start(0, 2, 1000000 / 15000);
 				}
 				yStepsTaken = yStepsTaken * 0.98;
-				scaledY = (double)(yMotor->getSteps() / areaYmm);
+				scaledY = yStepsTaken / areaXmm;
 				yCalibrated = true;
 			}
 		}
@@ -440,16 +437,16 @@ int main(void) {
 #endif
 
 	//Plotter X DigitalIoPins
-	DigitalIoPin xStep(0, 27, DigitalIoPin::output, true);
-	DigitalIoPin xDir(0, 28, DigitalIoPin::output, true);
-	DigitalIoPin xLimitStart(0, 0, DigitalIoPin::pullup, true);
-	DigitalIoPin xLimitEnd(1, 3, DigitalIoPin::pullup, true);
+	DigitalIoPin xStep(0, 24, DigitalIoPin::output, true);
+	DigitalIoPin xDir(1, 0, DigitalIoPin::output, true);
+	DigitalIoPin xLimitStart(0, 9, DigitalIoPin::pullup, true);
+	DigitalIoPin xLimitEnd(0, 29, DigitalIoPin::pullup, true);
 
 	//Plotter Y DigitalIoPins
-	DigitalIoPin yStep(0, 24, DigitalIoPin::output, true);
-	DigitalIoPin yDir(1, 0, DigitalIoPin::output, true);
-	DigitalIoPin yLimitStart(0, 9, DigitalIoPin::pullup, true);
-	DigitalIoPin yLimitEnd(0, 29, DigitalIoPin::pullup, true);
+	DigitalIoPin yStep(0, 27, DigitalIoPin::output, true);
+	DigitalIoPin yDir(0, 28, DigitalIoPin::output, true);
+	DigitalIoPin yLimitStart(0, 0, DigitalIoPin::pullup, true);
+	DigitalIoPin yLimitEnd(1, 3, DigitalIoPin::pullup, true);
 
 	//X and Y Motors
 
@@ -466,7 +463,7 @@ int main(void) {
 	SCTLARGE0_Init();
 
 	NVIC_SetPriority(RITIMER_IRQn,
-			configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+	configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
 #if 1
 	xTaskCreate(vCalibrate, "vCalibrate", configMINIMAL_STACK_SIZE * 8, NULL,
