@@ -47,6 +47,9 @@ bool stepTurn = true;
 bool xCalibrated = false;
 bool yCalibrated = false;
 
+double scaledX, scaledY;
+int areaXmm = 340, areaYmm = 300;
+
 int xStepsTaken, yStepsTaken;
 
 enum command {
@@ -193,8 +196,8 @@ void triggerMotors(GObject object) {
 	x1 = object.xCoord;
 	y1 = object.yCoord;
 
-	dx = abs(x1 - x0) * (double) xMotor->getSteps() / (double) 340;
-	dy = abs(y1 - y0) * (double) yMotor->getSteps() / (double) 310;
+	dx = abs(x1 - x0) * scaledX;
+	dy = abs(y1 - y0) * scaledY;
 
 	xDir = (x0 < x1) ? true : false;
 	yDir = (y0 < y1) ? true : false;
@@ -289,6 +292,7 @@ static void vCalibrate(void *pvParameters) {
 					RIT_start(2, 0, 1000000 / 15000);
 				}
 				xStepsTaken = xStepsTaken * 0.98;
+				scaledX = (double)(xMotor->getSteps() / areaXmm);
 				xCalibrated = true;
 			}
 		}
@@ -304,6 +308,7 @@ static void vCalibrate(void *pvParameters) {
 					RIT_start(0, 2, 1000000 / 15000);
 				}
 				yStepsTaken = yStepsTaken * 0.98;
+				scaledY = (double)(yMotor->getSteps() / areaYmm);
 				yCalibrated = true;
 			}
 		}
@@ -377,7 +382,7 @@ static void vStepperTask(void *pvParameters) {
 			switch (gObject.command) {
 			case M10:
 				USB_send(
-						(uint8_t *) "M10 XY 340 310 0.00 0.00 A0 B0 H0 S80 U160 D90\n",
+						(uint8_t *) "M10 XY 340 300 0.00 0.00 A0 B0 H0 S80 U160 D90\n",
 						48);
 				USB_send((uint8_t *) "OK\n", 4);
 				break;
@@ -464,7 +469,7 @@ int main(void) {
 			configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
 #if 1
-	xTaskCreate(vCalibrateX, "vCalibrate", configMINIMAL_STACK_SIZE * 8, NULL,
+	xTaskCreate(vCalibrate, "vCalibrate", configMINIMAL_STACK_SIZE * 8, NULL,
 			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
 #endif
 
