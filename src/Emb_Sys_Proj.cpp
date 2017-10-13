@@ -234,10 +234,10 @@ void triggerMotors(GObject object) {
 			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
 					deltaError);
 			ITM_write(buffer);
-			RIT_start(2, 0, 1000000 / 8000);
+			RIT_start(2, 0, 1000000 / 12000);
 			error += deltaError;
 			if (error > 0.5) {
-				RIT_start(0, 2, 1000000 / 48000);
+				RIT_start(0, 2, 1000000 / 12000);
 				error -= 1.0;
 			}
 			dx--;
@@ -255,10 +255,10 @@ void triggerMotors(GObject object) {
 			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
 					deltaError);
 			ITM_write(buffer);
-			RIT_start(0, 2, 1000000 / 8000);
+			RIT_start(0, 2, 1000000 / 12000);
 			error += deltaError;
 			if (error > 0.5) {
-				RIT_start(2, 0, 1000000 / 8000);
+				RIT_start(2, 0, 1000000 / 12000);
 				error -= 1.0;
 			}
 			dy--;
@@ -270,60 +270,45 @@ void triggerMotors(GObject object) {
 
 /* TASKS */
 
-static void vCalibrateX(void *pvParameters) {
+static void vCalibrate(void *pvParameters) {
+	LPC_SCTLARGE0->MATCHREL[1].L = 1100;
+
 	xMotor->setDirection(true);
-	while (!xCalibrated) {
-		xStepsTaken++;
-		RIT_start(2, 0, 1000000 / 8000);
-		if (xMotor->getLimitStart().read()) {
-			xMotor->setDirection(false);
-			xStepsTaken = 0;
-		} else if (xMotor->getLimitEnd().read()) {
-			for (int i = 0; i < (xStepsTaken * 0.02); i++) {
-				xMotor->setDirection(true);
-				RIT_start(2, 0, 1000000 / 10000);
-			}
-			xStepsTaken = xStepsTaken * 0.98;
-			xCalibrated = true;
-		}
-	}
 	yMotor->setDirection(true);
-	while (!yCalibrated) {
-		yStepsTaken++;
-		RIT_start(0, 2, 1000000 / 10000);
-		if (yMotor->getLimitStart().read()) {
-			yMotor->setDirection(false);
-			yStepsTaken = 0;
-		} else if (yMotor->getLimitEnd().read()) {
-			for (int i = 0; i < (yStepsTaken * 0.02); i++) {
-				yMotor->setDirection(true);
-				RIT_start(0, 2, 1000000 / 8000);
+
+	while(!xCalibrated || !yCalibrated) {
+		if (!xCalibrated) {
+			xStepsTaken++;
+			RIT_start(2, 0, 1000000 / 15000);
+			if (xMotor->getLimitStart().read()) {
+				xMotor->setDirection(false);
+				xStepsTaken = 0;
+			} else if (xMotor->getLimitEnd().read()) {
+				for (int i = 0; i < (xStepsTaken * 0.02); i++) {
+					xMotor->setDirection(true);
+					RIT_start(2, 0, 1000000 / 15000);
+				}
+				xStepsTaken = xStepsTaken * 0.98;
+				xCalibrated = true;
 			}
-			yStepsTaken = yStepsTaken * 0.98;
-			yCalibrated = true;
+		}
+		if (!yCalibrated) {
+			yStepsTaken++;
+			RIT_start(0, 2, 1000000 / 15000);
+			if (yMotor->getLimitStart().read()) {
+				yMotor->setDirection(false);
+				yStepsTaken = 0;
+			} else if (yMotor->getLimitEnd().read()) {
+				for (int i = 0; i < (yStepsTaken * 0.02); i++) {
+					yMotor->setDirection(true);
+					RIT_start(0, 2, 1000000 / 15000);
+				}
+				yStepsTaken = yStepsTaken * 0.98;
+				yCalibrated = true;
+			}
 		}
 	}
 
-	vTaskDelete(NULL);
-}
-
-static void vCalibrateY(void *pvParameters) {
-	yMotor->setDirection(true);
-	while (!yCalibrated) {
-		yStepsTaken++;
-		RIT_start(0, 2, 1000000 / 10000);
-		if (yMotor->getLimitStart().read()) {
-			yMotor->setDirection(false);
-			yStepsTaken = 0;
-		} else if (yMotor->getLimitEnd().read()) {
-			for (int i = 0; i < (yStepsTaken * 0.02); i++) {
-				yMotor->setDirection(true);
-				RIT_start(0, 2, 1000000 / 8000);
-			}
-			yStepsTaken = yStepsTaken * 0.98;
-			yCalibrated = true;
-		}
-	}
 	vTaskDelete(NULL);
 }
 
@@ -399,7 +384,7 @@ static void vStepperTask(void *pvParameters) {
 			case M1:
 				sprintf(buffer, "gObjectAngle: %d\n", gObject.servo);
 				ITM_write(buffer);
-				if (gObject.servo == 90) {
+				if (gObject.servo == 160) { // oli 90
 					LPC_SCTLARGE0->MATCHREL[1].L = 1100;
 				} else {
 					LPC_SCTLARGE0->MATCHREL[1].L = 1600;
@@ -479,11 +464,7 @@ int main(void) {
 			configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
 #if 1
-	xTaskCreate(vCalibrateX, "vCalibrateX", configMINIMAL_STACK_SIZE * 8, NULL,
-			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
-#endif
-#if 0
-	xTaskCreate(vCalibrateY, "vCalibrateY", configMINIMAL_STACK_SIZE * 8, NULL,
+	xTaskCreate(vCalibrateX, "vCalibrate", configMINIMAL_STACK_SIZE * 8, NULL,
 			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
 #endif
 
