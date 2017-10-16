@@ -193,8 +193,8 @@ void triggerMotors(GObject object) {
 	x1 = object.xCoord;
 	y1 = object.yCoord;
 
-	dx = abs(x1 - x0) * (double) xMotor->getSteps() / (double) 340;
-	dy = abs(y1 - y0) * (double) yMotor->getSteps() / (double) 310;
+	dx = abs(x1 - x0) * (double) xMotor->getSteps() / (double) 340; //(double) xMotor->getSteps() should be xStepsTaken
+	dy = abs(y1 - y0) * (double) yMotor->getSteps() / (double) 310; //(double) yMotor->getSteps() should be yStepsTaken
 
 	xDir = (x0 < x1) ? true : false;
 	yDir = (y0 < y1) ? true : false;
