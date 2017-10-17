@@ -207,7 +207,7 @@ void triggerMotors(GObject object) {
 	xMotor->setDirection(xDir);
 	yMotor->setDirection(yDir);
 
-	xDominating = (x1 > y1) ? true : false;
+	xDominating = (dx > dy) ? true : false;
 
 //	if (xDir) {
 //		x0 += (x1 - x0);
