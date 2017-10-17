@@ -38,16 +38,16 @@ Motor *yMotor;
 
 QueueHandle_t commandQueue;
 
-int x0 = 0, x1, y0 = 0, y1, dx, dy;
+double x0 = 0, x1, y0 = 0, y1, dx, dy;
 double deltaError = 0.0;
-double error = 0.0;
+double error = 0.5;
 bool xDominating;
 bool xDir, yDir;
 bool stepTurn = true;
 bool xCalibrated = false;
 bool yCalibrated = false;
 
-int scaledX, scaledY;
+double scaledX, scaledY;
 int areaXmm = 340, areaYmm = 300;
 
 int xStepsTaken, yStepsTaken;
@@ -61,8 +61,8 @@ struct GObject {
 
 	int servo = 0;
 
-	int xCoord = 0;
-	int yCoord = 0;
+	double xCoord = 0;
+	double yCoord = 0;
 };
 
 GObject gObject;
@@ -209,60 +209,49 @@ void triggerMotors(GObject object) {
 
 	xDominating = (dx > dy) ? true : false;
 
-//	if (xDir) {
-//		x0 += (x1 - x0);
-//	} else {
-//		x0 -= (x1 - x0);
-//	}
-//	if (yDir) {
-//		y0 += (y1 - y0);
-//	} else {
-//		y0 -= (y1 - y0);
-//	}
-
 	ITM_write("--- Error values ---\n");
 	if (xDominating) {
 		if (dx == 0) {
-			deltaError = 0.0f;
+			deltaError = 0.5;
 		} else {
-			deltaError = ((double) dy / (double) dx);
+			deltaError = ( dy / dx);
 		}
 		while (dx > 0) {
 			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
 					deltaError);
 			ITM_write(buffer);
-			RIT_start(2, 0, 1000000 / 15000);
+			RIT_start(2, 0, 1000000 / 7500);
 			error += deltaError;
 			if (error > 0.5) {
-				RIT_start(0, 2, 1000000 / 15000);
+				RIT_start(0, 2, 1000000 / 7500);
 				error -= 1.0;
 			}
 			dx--;
 		}
 	} else {
 		if (dy == 0) {
-			deltaError = 0.0f;
+			deltaError = 0.5;
 		} else {
-			deltaError = ((double) dx / (double) dy);
+			deltaError = (dx / dy);
 		}
 		while (dy > 0) {
 			sprintf(buffer, "Error: %6.2lf ||| DeltaError: %6.2lf\n", error,
 					deltaError);
 			ITM_write(buffer);
-			RIT_start(0, 2, 1000000 / 15000);
+			RIT_start(0, 2, 1000000 / 7500);
 			error += deltaError;
 			if (error > 0.5) {
-				RIT_start(2, 0, 1000000 / 15000);
+				RIT_start(2, 0, 1000000 / 7500);
 				error -= 1.0;
 			}
 			dy--;
 		}
 	}
 
-	sprintf(buffer,
-			"x0: %d, y0: %d, x1: %d, y1: %d, dx: %d, dy: %d, deltaError: %6.2lf\n",
-			x0, y0, x1, y1, dx, dy, deltaError);
-	ITM_write(buffer);
+//	sprintf(buffer,
+//			"x0: %d, y0: %d, x1: %d, y1: %d, dx: %d, dy: %d, deltaError: %6.2lf\n",
+//			x0, y0, x1, y1, dx, dy, deltaError);
+//	ITM_write(buffer);
 
 	x0 += (x1 - x0);
 	y0 += (y1 - y0);
@@ -310,7 +299,6 @@ static void vCalibrate(void *pvParameters) {
 			}
 		}
 	}
-
 	vTaskDelete(NULL);
 }
 
@@ -392,6 +380,7 @@ static void vStepperTask(void *pvParameters) {
 					LPC_SCTLARGE0->MATCHREL[1].L = 1600;
 				}
 				USB_send((uint8_t *) "OK\n", 4);
+				vTaskDelay(10);
 				break;
 			case G1:
 				sprintf(buffer, "gObjectX: %d, gObjectY: %d\n", gObject.xCoord,
@@ -404,7 +393,7 @@ static void vStepperTask(void *pvParameters) {
 				USB_send((uint8_t *) "OK\n", 4);
 				break;
 			}
-			vTaskDelay(1);
+//			vTaskDelay(1);
 		}
 	}
 }
@@ -466,14 +455,14 @@ int main(void) {
 	configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY + 1);
 
 #if 1
-	xTaskCreate(vCalibrate, "vCalibrate", configMINIMAL_STACK_SIZE * 8, NULL,
+	xTaskCreate(vCalibrate, "vCalibrate", configMINIMAL_STACK_SIZE * 10, NULL,
 			(tskIDLE_PRIORITY + 3UL), (TaskHandle_t *) NULL);
 #endif
 
-	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 8, NULL,
+	xTaskCreate(vParserTask, "vParserTask", configMINIMAL_STACK_SIZE * 10, NULL,
 			(tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
 
-	xTaskCreate(vStepperTask, "vStepperTask", configMINIMAL_STACK_SIZE * 5,
+	xTaskCreate(vStepperTask, "vStepperTask", configMINIMAL_STACK_SIZE * 10,
 			NULL, (tskIDLE_PRIORITY + 2UL), (TaskHandle_t *) NULL);
 
 	xTaskCreate(cdc_task, "CDC", configMINIMAL_STACK_SIZE * 5, NULL,
