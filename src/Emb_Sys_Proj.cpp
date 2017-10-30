@@ -198,8 +198,10 @@ void triggerMotors(GObject object) {
 
 	dx = abs(x1 - x0) * (double) xMotor->getSteps() / (double) 340; //(double) xMotor->getSteps() should be xStepsTaken
 	dy = abs(y1 - y0) * (double) yMotor->getSteps() / (double) 310; //(double) yMotor->getSteps() should be yStepsTaken
+=======
 	dx = (x1 - x0) * scaledX;
 	dy = (y1 - y0) * scaledY;
+>>>>>>> development
 
 	dx = abs(dx);
 	dy = abs(dy);
