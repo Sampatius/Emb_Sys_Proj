@@ -196,12 +196,8 @@ void triggerMotors(GObject object) {
 	x1 = object.xCoord;
 	y1 = object.yCoord;
 
-	dx = abs(x1 - x0) * (double) xMotor->getSteps() / (double) 340; //(double) xMotor->getSteps() should be xStepsTaken
-	dy = abs(y1 - y0) * (double) yMotor->getSteps() / (double) 310; //(double) yMotor->getSteps() should be yStepsTaken
-=======
 	dx = (x1 - x0) * scaledX;
 	dy = (y1 - y0) * scaledY;
->>>>>>> development
 
 	dx = abs(dx);
 	dy = abs(dy);
@@ -251,11 +247,6 @@ void triggerMotors(GObject object) {
 			dy--;
 		}
 	}
-
-//	sprintf(buffer,
-//			"x0: %d, y0: %d, x1: %d, y1: %d, dx: %d, dy: %d, deltaError: %6.2lf\n",
-//			x0, y0, x1, y1, dx, dy, deltaError);
-//	ITM_write(buffer);
 
 	x0 += (x1 - x0);
 	y0 += (y1 - y0);
